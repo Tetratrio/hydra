@@ -5,6 +5,7 @@ Configuration loader
 import copy
 import os
 import re
+import sys
 import warnings
 from collections import defaultdict
 from dataclasses import dataclass
@@ -27,7 +28,7 @@ from hydra.core.override_parser.overrides_parser import OverridesParser
 from hydra.core.override_parser.types import Override, OverrideType, ValueType
 from hydra.core.utils import JobRuntime
 from hydra.errors import ConfigCompositionException, MissingConfigException
-from hydra.plugins.config_source import ConfigLoadError, ConfigSource
+from hydra.plugins.config_source import ConfigLoadError, ConfigResult, ConfigSource
 from hydra.types import RunMode
 
 
@@ -138,7 +139,7 @@ class ConfigLoaderImpl(ConfigLoader):
                 from_shell=from_shell,
             )
         except OmegaConfBaseException as e:
-            raise ConfigCompositionException() from e
+            raise ConfigCompositionException().with_traceback(sys.exc_info()[2]) from e
 
     def _load_configuration(
         self,
@@ -200,15 +201,19 @@ class ConfigLoaderImpl(ConfigLoader):
         )
 
         # Load hydra config
-        hydra_cfg, _load_trace = self._load_primary_config(cfg_filename="hydra_config")
+        hydra_cfg_ret, _trace = self._load_primary_config(cfg_filename="hydra_config")
+        hydra_cfg = hydra_cfg_ret.config
+        assert isinstance(hydra_cfg, DictConfig)
 
         # Load job config
-        job_cfg, job_cfg_load_trace = self._load_primary_config(
+        job_cfg_ret, job_cfg_load_trace = self._load_primary_config(
             cfg_filename=config_name, record_load=False
         )
+        job_cfg = job_cfg_ret.config
+        assert isinstance(job_cfg, DictConfig)
 
-        job_defaults = self._parse_defaults(job_cfg)
-        defaults = self._parse_defaults(hydra_cfg)
+        job_defaults = job_cfg_ret.defaults_list
+        defaults = hydra_cfg_ret.defaults_list
 
         job_cfg_type = OmegaConf.get_type(job_cfg)
         if job_cfg_type is not None and not issubclass(job_cfg_type, dict):
@@ -221,7 +226,7 @@ class ConfigLoaderImpl(ConfigLoader):
 
             OmegaConf.set_readonly(hydra_cfg.hydra, False)
 
-        # if defaults are re-introduced by the promotion, remove it.
+        # if defaults are re-introduced by the promotion, remove it. # TODO: remove?
         if "defaults" in hydra_cfg:
             with open_dict(hydra_cfg):
                 del hydra_cfg["defaults"]
@@ -561,7 +566,7 @@ class ConfigLoaderImpl(ConfigLoader):
         package_override: Optional[str],
         is_primary_config: bool,
         record_load: bool = True,
-    ) -> Tuple[Optional[DictConfig], Optional[LoadTrace]]:
+    ) -> Tuple[Optional[ConfigResult], Optional[LoadTrace]]:
         """
         :param input_file:
         :param record_load:
@@ -607,6 +612,9 @@ class ConfigLoaderImpl(ConfigLoader):
                                 del merged["hydra"]
                             if "defaults" in merged and merged["defaults"] == []:
                                 del merged["defaults"]
+                        ret.config = merged
+                        # TODO REMOVE END
+
                     except OmegaConfBaseException as e:
                         raise ConfigCompositionException(
                             f"Error merging '{input_file}' with schema"
@@ -614,7 +622,7 @@ class ConfigLoaderImpl(ConfigLoader):
 
                     assert isinstance(merged, DictConfig)
                     return (
-                        merged,
+                        ret,
                         self._record_loading(
                             name=input_file,
                             path=ret.path,
@@ -629,7 +637,7 @@ class ConfigLoaderImpl(ConfigLoader):
                     pass
 
             return (
-                ret.config,
+                ret,
                 self._record_loading(
                     name=input_file,
                     path=ret.path,
@@ -700,13 +708,14 @@ class ConfigLoaderImpl(ConfigLoader):
                     return cfg
 
             else:
-                ret = OmegaConf.merge(cfg, loaded_cfg)
+                ret = OmegaConf.merge(cfg, loaded_cfg.config)
                 assert isinstance(ret, DictConfig)
                 return ret
         except OmegaConfBaseException as ex:
+            # preserve the original exception backtrace
             raise ConfigCompositionException(
                 f"Error merging {config_group}={name}"
-            ) from ex
+            ).with_traceback(sys.exc_info()[2]) from ex
 
     def _merge_defaults_into_config(
         self,
@@ -793,10 +802,15 @@ class ConfigLoaderImpl(ConfigLoader):
 
     def _load_primary_config(
         self, cfg_filename: Optional[str], record_load: bool = True
-    ) -> Tuple[DictConfig, Optional[LoadTrace]]:
+    ) -> Tuple[ConfigResult, Optional[LoadTrace]]:
         if cfg_filename is None:
-            cfg = OmegaConf.create()
-            assert isinstance(cfg, DictConfig)
+            ret = ConfigResult(
+                provider="<UNKNOWN>",
+                path="<UNKNOWN>",
+                config=OmegaConf.create(),
+                header={},
+                defaults_list=[],
+            )
             load_trace = None
         else:
             ret, load_trace = self._load_config_impl(
@@ -806,66 +820,9 @@ class ConfigLoaderImpl(ConfigLoader):
                 record_load=record_load,
             )
             assert ret is not None
-            cfg = ret
 
-        return cfg, load_trace
-
-    @staticmethod
-    def _parse_defaults(cfg: DictConfig) -> List[DefaultElement]:
-        valid_example = """
-        Example of a valid defaults:
-        defaults:
-          - dataset: imagenet
-          - model: alexnet
-            optional: true
-          - optimizer: nesterov
-        """
-
-        if "defaults" in cfg:
-            defaults = cfg.defaults
-        else:
-            defaults = OmegaConf.create([])
-
-        if not isinstance(defaults, ListConfig):
-            raise ValueError(
-                "defaults must be a list because composition is order sensitive, "
-                + valid_example
-            )
-
-        assert isinstance(defaults, ListConfig)
-
-        res: List[DefaultElement] = []
-        for item in defaults:
-            if isinstance(item, DictConfig):
-                optional = False
-                if "optional" in item:
-                    optional = item.pop("optional")
-                keys = list(item.keys())
-                if len(keys) > 1:
-                    raise ValueError(f"Too many keys in default item {item}")
-                if len(keys) == 0:
-                    raise ValueError(f"Missing group name in {item}")
-                key = keys[0]
-                config_group, package = ConfigLoaderImpl._split_group(key)
-                node = item._get_node(key)
-                assert node is not None
-                config_name = node._value()
-
-                default = DefaultElement(
-                    config_group=config_group,
-                    config_name=config_name,
-                    package=package,
-                    optional=optional,
-                )
-            elif isinstance(item, str):
-                default = DefaultElement(config_group=None, config_name=item)
-            else:
-                raise ValueError(
-                    f"Unsupported type in defaults : {type(item).__name__}"
-                )
-            res.append(default)
-
-        return res
+        assert isinstance(ret.config, DictConfig)
+        return ret, load_trace
 
     def get_sources(self) -> List[ConfigSource]:
         return self.repository.get_sources()

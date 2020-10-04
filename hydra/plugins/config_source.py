@@ -5,11 +5,18 @@ import re
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 
 from hydra.core import DefaultElement
 from hydra.errors import HydraException
-from omegaconf import Container, OmegaConf, ListConfig, DictConfig
+from omegaconf import (
+    Container,
+    OmegaConf,
+    ListConfig,
+    DictConfig,
+    open_dict,
+    read_write,
+)
 
 from hydra.core.object_type import ObjectType
 from hydra.plugins.plugin import Plugin
@@ -21,9 +28,8 @@ class ConfigResult:
     path: str
     config: Container
     header: Dict[str, str]
+    defaults_list: List[DefaultElement]
     is_schema_source: bool = False
-    # TODO: Config sources should return the defaults list separately
-    defaults_list: Optional[ListConfig] = None
 
 
 class ConfigLoadError(HydraException, IOError):
@@ -233,5 +239,77 @@ class ConfigSource(Plugin):
 
         return res
 
-    def _extract_defaults_list(self, cfg: DictConfig) -> List[DefaultElement]:
-        ...
+    @staticmethod
+    def _create_defaults_list(defaults: ListConfig) -> List[DefaultElement]:
+        # TODO: exception should contain the name of the config with the bad defaults list
+        valid_example = """
+        Example of a valid defaults:
+        defaults:
+          - dataset: imagenet
+          - model: alexnet
+            optional: true
+          - optimizer: nesterov
+        """
+
+        def _split_group(group_with_package: str) -> Tuple[str, Optional[str]]:
+            idx = group_with_package.find("@")
+            if idx == -1:
+                # group
+                group = group_with_package
+                package = None
+            else:
+                # group@package
+                group = group_with_package[0:idx]
+                package = group_with_package[idx + 1 :]
+
+            return group, package
+
+        if not isinstance(defaults, ListConfig):
+            raise ValueError(
+                "defaults must be a list because composition is order sensitive, "
+                + valid_example
+            )
+
+        res: List[DefaultElement] = []
+        for item in defaults:
+            if isinstance(item, DictConfig):
+                optional = False
+                if "optional" in item:
+                    optional = item.pop("optional")
+                keys = list(item.keys())
+                if len(keys) > 1:
+                    raise ValueError(f"Too many keys in default item {item}")
+                if len(keys) == 0:
+                    raise ValueError(f"Missing group name in {item}")
+                key = keys[0]
+                config_group, package = _split_group(key)
+                node = item._get_node(key)
+                assert node is not None
+                config_name = node._value()
+
+                default = DefaultElement(
+                    config_group=config_group,
+                    config_name=config_name,
+                    package=package,
+                    optional=optional,
+                )
+            elif isinstance(item, str):
+                default = DefaultElement(config_group=None, config_name=item)
+            else:
+                raise ValueError(
+                    f"Unsupported type in defaults : {type(item).__name__}"
+                )
+            res.append(default)
+        return res
+
+    @staticmethod
+    def _extract_defaults_list(cfg: Container) -> List[DefaultElement]:
+        if not OmegaConf.is_dict(cfg):
+            return []
+
+        assert isinstance(cfg, DictConfig)
+        with read_write(cfg):
+            with open_dict(cfg):
+                defaults = cfg.pop("defaults", OmegaConf.create([]))
+
+        return ConfigSource._create_defaults_list(defaults)

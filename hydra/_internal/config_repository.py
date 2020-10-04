@@ -31,6 +31,7 @@ class ConfigRepository:
         )
         return source
 
+    # TODO : why do we need is_primary here?
     def load_config(
         self,
         config_path: str,
