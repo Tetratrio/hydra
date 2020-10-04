@@ -7,8 +7,9 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, Dict
 
+from hydra.core import DefaultElement
 from hydra.errors import HydraException
-from omegaconf import Container, OmegaConf, ListConfig
+from omegaconf import Container, OmegaConf, ListConfig, DictConfig
 
 from hydra.core.object_type import ObjectType
 from hydra.plugins.plugin import Plugin
@@ -231,3 +232,6 @@ class ConfigSource(Plugin):
                 break
 
         return res
+
+    def _extract_defaults_list(self, cfg: DictConfig) -> List[DefaultElement]:
+        ...

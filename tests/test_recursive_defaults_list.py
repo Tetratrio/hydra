@@ -41,9 +41,6 @@ def create_defaults(defaults: List) -> List[DefaultElement]:
     return d
 
 
-cs = ConfigStore.instance()
-cs.store(group="a", name="a1", node={})
-
 # registers config source plugins
 Plugins.instance()
 
@@ -54,7 +51,12 @@ Plugins.instance()
         pytest.param([{"a": "a1"}], [{"a": "a1"}], id="simple"),
     ],
 )
-def test_recursive_defaults(defaults: List[Any], expected: List[Any]) -> None:
+def test_recursive_defaults(
+    hydra_restore_singletons: Any, defaults: List[Any], expected: List[Any]
+) -> None:
+    cs = ConfigStore.instance()
+    cs.store(group="a", name="a1", node={})
+
     csp = ConfigSearchPathImpl()
     repo = ConfigRepository(config_search_path=csp)
     defaults = create_defaults(defaults)

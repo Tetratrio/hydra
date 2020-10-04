@@ -19,6 +19,7 @@ from omegaconf.errors import (
 )
 
 from hydra._internal.config_repository import ConfigRepository
+from hydra.core import DefaultElement
 from hydra.core.config_loader import ConfigLoader, LoadTrace
 from hydra.core.config_search_path import ConfigSearchPath
 from hydra.core.object_type import ObjectType
@@ -33,25 +34,6 @@ from hydra.types import RunMode
 class UnspecifiedMandatoryDefault(Exception):
     def __init__(self, config_group: str) -> None:
         self.config_group = config_group
-
-
-@dataclass
-class DefaultElement:
-    config_group: Optional[str]
-    config_name: str
-    optional: bool = False
-    package: Optional[str] = None
-
-    def __repr__(self) -> str:
-        ret = ""
-        if self.config_group is not None:
-            ret += self.config_group
-        if self.package is not None:
-            ret += f"@{self.package}"
-        ret += f"={self.config_name}"
-        if self.optional:
-            ret += " (optional)"
-        return ret
 
 
 @dataclass

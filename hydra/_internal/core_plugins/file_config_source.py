@@ -40,11 +40,13 @@ class FileConfigSource(ConfigSource):
             )
             f.seek(0)
             cfg = OmegaConf.load(f)
+            defaults_list = self._extract_defaults_list(cfg)
             return ConfigResult(
                 config=self._embed_config(cfg, header["package"]),
                 path=f"{self.scheme()}://{self.path}",
                 provider=self.provider,
                 header=header,
+                defaults_list=defaults_list,
             )
 
     def available(self) -> bool:
