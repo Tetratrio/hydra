@@ -608,6 +608,7 @@ class ConfigLoaderImpl(ConfigLoader):
                     )
 
                     try:
+                        # TODO: this should probably go
                         if is_primary_config:
                             # Add as placeholders for hydra and defaults to allow
                             # overriding them from the config even if not in schema

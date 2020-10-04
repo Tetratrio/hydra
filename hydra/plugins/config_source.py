@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict
 
 from hydra.errors import HydraException
-from omegaconf import Container, OmegaConf
+from omegaconf import Container, OmegaConf, ListConfig
 
 from hydra.core.object_type import ObjectType
 from hydra.plugins.plugin import Plugin
@@ -21,6 +21,8 @@ class ConfigResult:
     config: Container
     header: Dict[str, str]
     is_schema_source: bool = False
+    # TODO: Config sources should return the defaults list separately
+    defaults_list: Optional[ListConfig] = None
 
 
 class ConfigLoadError(HydraException, IOError):
