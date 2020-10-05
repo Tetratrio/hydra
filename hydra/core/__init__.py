@@ -5,8 +5,8 @@ from typing import Optional
 
 @dataclass
 class DefaultElement:
-    config_group: Optional[str]
     config_name: str
+    config_group: Optional[str] = None
     optional: bool = False
     package: Optional[str] = None
 
