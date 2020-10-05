@@ -1,0 +1,3 @@
+defaults:
+  - no_defaults
+  - _self_

@@ -4,23 +4,23 @@ from typing import List, Any
 from hydra._internal.config_repository import ConfigRepository
 from hydra._internal.config_search_path_impl import ConfigSearchPathImpl
 from hydra.core import DefaultElement
-from hydra.core.config_store import ConfigStore
 from hydra.core.plugins import Plugins
 from hydra.errors import ConfigCompositionException
-from hydra.plugins.config_source import ConfigSource
 from hydra.test_utils.test_utils import chdir_hydra_root
-from omegaconf import OmegaConf
 
 chdir_hydra_root()
 
 
-def resolve_defaults_list(
+def compute_defaults_list(
     config_path: str,
-    defaults: List[DefaultElement],
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
     # TODO: if we have two passes, be sure to cache the loaded configs
     has_self = False
+
+    loaded = repo.load_config(config_path=config_path, is_primary_config=False)
+    defaults = loaded.defaults_list
+
     for d in defaults:
         if d.config_name == "_self_":
             if has_self is True:
@@ -32,8 +32,8 @@ def resolve_defaults_list(
             d.config_name = config_path
 
     if not has_self:
-        # TODO: should inherit package of config
-        defaults.append(DefaultElement(config_name=config_path))
+        package = loaded.header["package"] if loaded.header["package"] != "" else None
+        defaults.append(DefaultElement(config_name=config_path, package=package))
 
     # ret = []
     for d in defaults:
@@ -56,67 +56,76 @@ Plugins.instance()
 
 
 @pytest.mark.parametrize(  # type: ignore
-    "defaults,expected",
+    "config_path,expected",
     [
         pytest.param(
-            ["no_defaults"],
+            "no_defaults",
             [
                 DefaultElement(config_name="no_defaults"),
-                DefaultElement(config_name="test_config"),
             ],
             id="no_defaults",
         ),
         pytest.param(
-            ["_self_", "foo", "_self_"],
+            "duplicate_self",
             pytest.raises(
                 ConfigCompositionException,
-                match="Duplicate _self_ defined in test_config",
+                match="Duplicate _self_ defined in duplicate_self",
             ),
             id="duplicate_self",
         ),
         pytest.param(
-            ["no_defaults", "_self_"],
+            "explicit_trailing_self",
             [
                 DefaultElement(config_name="no_defaults"),
-                DefaultElement(config_name="test_config"),
+                DefaultElement(config_name="explicit_trailing_self"),
             ],
             id="explicit_trailing_self",
         ),
         pytest.param(
-            ["_self_", "no_defaults"],
+            "implicit_trailing_self",
             [
-                DefaultElement(config_name="test_config"),
+                DefaultElement(config_name="no_defaults"),
+                DefaultElement(config_name="implicit_trailing_self"),
+            ],
+            id="implicit_trailing_self",
+        ),
+        pytest.param(
+            "leading_self",
+            [
+                DefaultElement(config_name="leading_self"),
                 DefaultElement(config_name="no_defaults"),
             ],
-            id="explicit_leading_self",
+            id="leading_self",
         ),
-        # pytest.param(
-        #     [{"a": "a1"}],
-        #     [{"a": "a1"}],
-        #     id="simple",
-        # ),
+        pytest.param(
+            "a/a1",
+            [
+                DefaultElement(config_name="a/a1", package="a"),
+            ],
+            id="primary_in_config_group_no_defaults",
+        ),
+        pytest.param(
+            "a/global",
+            [
+                DefaultElement(config_name="a/global"),
+            ],
+            id="primary_in_config_group_global__no_defaults",
+        ),
     ],
 )
 def test_recursive_defaults(
-    hydra_restore_singletons: Any, defaults: List[Any], expected: List[Any]
+    hydra_restore_singletons: Any, config_path: str, expected: List[Any]
 ) -> None:
-    cs = ConfigStore.instance()
-    cs.store(group="a", name="a1", node={})
-
     csp = ConfigSearchPathImpl()
     csp.append(provider="test", path="file://tests/test_data/recursive_defaults_lists")
     repo = ConfigRepository(config_search_path=csp)
 
-    defaults = OmegaConf.create(defaults)
-    defaults = ConfigSource._create_defaults_list(defaults)
+    # defaults = OmegaConf.create(defaults)
+    # defaults = ConfigSource._create_defaults_list(defaults)
 
     if isinstance(expected, list):
-        ret = resolve_defaults_list(
-            config_path="test_config", defaults=defaults, repo=repo
-        )
+        ret = compute_defaults_list(config_path=config_path, repo=repo)
         assert ret == expected
     else:
         with expected:
-            resolve_defaults_list(
-                config_path="test_config", defaults=defaults, repo=repo
-            )
+            compute_defaults_list(config_path=config_path, repo=repo)
