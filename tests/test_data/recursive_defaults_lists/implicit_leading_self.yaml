@@ -1,0 +1,3 @@
+defaults:
+  # implicit _self_
+  - no_defaults

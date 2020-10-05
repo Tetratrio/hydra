@@ -1,3 +1,5 @@
+import copy
+
 import pytest
 from typing import List, Any
 
@@ -15,10 +17,14 @@ def compute_defaults_list(
     config_path: str,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
-    # TODO: if we have two passes, be sure to cache the loaded configs
+    # TODO: Should loaded configs be to cached in the repo to avoid loading more than once?
     has_self = False
 
     loaded = repo.load_config(config_path=config_path, is_primary_config=False)
+    if loaded is None:
+        # TODO : add testing for this error (there should already be a similar error)
+        raise ConfigCompositionException(f"Could not load {config_path}")
+
     defaults = loaded.defaults_list
 
     for d in defaults:
@@ -29,26 +35,28 @@ def compute_defaults_list(
                 )
             has_self = True
             assert d.config_group is None
-            d.config_name = config_path
 
     if not has_self:
-        package = loaded.header["package"] if loaded.header["package"] != "" else None
-        defaults.append(DefaultElement(config_name=config_path, package=package))
+        defaults.insert(0, DefaultElement(config_name="_self_"))
 
-    # ret = []
+    ret = []
     for d in defaults:
-        pass
-        # if d.config_group is not None:
-        #     path = f"{d.config_group}/{d.config_name}"
-        # else:
-        #     path = d.config_name
-        # c = repo.load_config(path, is_primary_config=True)
-        # if c is None:
-        #     raise IOError(f"Can't load {path}")
-        # if len(c.defaults_list) > 0:
-        #     # merge?
-        #     ret.append(c.defaults_list)
-    return defaults
+        if d.config_name != "_self_":
+            if d.config_group is not None:
+                path = f"{d.config_group}/{d.config_name}"
+            else:
+                path = d.config_name
+            item_defaults = compute_defaults_list(config_path=path, repo=repo)
+            ret.extend(item_defaults)
+        else:
+            d = copy.deepcopy(d)
+            lpackage = loaded.header["package"]
+            package = lpackage if lpackage != "" else None
+            d.config_name = config_path
+            d.package = package
+            ret.append(d)
+
+    return ret
 
 
 # registers config source plugins
@@ -74,28 +82,28 @@ Plugins.instance()
             id="duplicate_self",
         ),
         pytest.param(
-            "explicit_trailing_self",
+            "trailing_self",
             [
                 DefaultElement(config_name="no_defaults"),
-                DefaultElement(config_name="explicit_trailing_self"),
+                DefaultElement(config_name="trailing_self"),
             ],
-            id="explicit_trailing_self",
+            id="trailing_self",
         ),
         pytest.param(
-            "implicit_trailing_self",
+            "implicit_leading_self",
             [
+                DefaultElement(config_name="implicit_leading_self"),
                 DefaultElement(config_name="no_defaults"),
-                DefaultElement(config_name="implicit_trailing_self"),
             ],
-            id="implicit_trailing_self",
+            id="implicit_leading_self",
         ),
         pytest.param(
-            "leading_self",
+            "explicit_leading_self",
             [
-                DefaultElement(config_name="leading_self"),
+                DefaultElement(config_name="explicit_leading_self"),
                 DefaultElement(config_name="no_defaults"),
             ],
-            id="leading_self",
+            id="explicit_leading_self",
         ),
         pytest.param(
             "a/a1",
@@ -109,7 +117,40 @@ Plugins.instance()
             [
                 DefaultElement(config_name="a/global"),
             ],
-            id="primary_in_config_group_global__no_defaults",
+            id="a/global",
+        ),
+        pytest.param(
+            "b/b1",
+            [
+                DefaultElement(config_name="b/b1", package="b"),
+            ],
+            id="b/b1",
+        ),
+        pytest.param(
+            "a/a2",
+            [
+                DefaultElement(config_name="a/a2", package="a"),
+                DefaultElement(config_name="b/b1", package="b"),
+            ],
+            id="a/a2",
+        ),
+        pytest.param(
+            "recursive_item_explicit_self",
+            [
+                DefaultElement(config_name="recursive_item_explicit_self"),
+                DefaultElement(config_name="a/a2", package="a"),
+                DefaultElement(config_name="b/b1", package="b"),
+            ],
+            id="recursive_item_explicit_self",
+        ),
+        pytest.param(
+            "recursive_item_implicit_self",
+            [
+                DefaultElement(config_name="recursive_item_implicit_self"),
+                DefaultElement(config_name="a/a2", package="a"),
+                DefaultElement(config_name="b/b1", package="b"),
+            ],
+            id="recursive_item_implicit_self",
         ),
     ],
 )
@@ -119,9 +160,6 @@ def test_recursive_defaults(
     csp = ConfigSearchPathImpl()
     csp.append(provider="test", path="file://tests/test_data/recursive_defaults_lists")
     repo = ConfigRepository(config_search_path=csp)
-
-    # defaults = OmegaConf.create(defaults)
-    # defaults = ConfigSource._create_defaults_list(defaults)
 
     if isinstance(expected, list):
         ret = compute_defaults_list(config_path=config_path, repo=repo)

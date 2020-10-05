@@ -16,6 +16,7 @@ class DefaultElement:
             ret += self.config_group
         if self.package is not None:
             ret += f"@{self.package}"
+
         ret += f"={self.config_name}"
         if self.optional:
             ret += " (optional)"
