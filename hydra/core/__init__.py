@@ -10,14 +10,8 @@ class DefaultElement:
     optional: bool = False
     package: Optional[str] = None
 
-    def __repr__(self) -> str:
-        ret = ""
+    def config_path(self) -> str:
         if self.config_group is not None:
-            ret += self.config_group
-        if self.package is not None:
-            ret += f"@{self.package}"
-
-        ret += f"={self.config_name}"
-        if self.optional:
-            ret += " (optional)"
-        return ret
+            return f"{self.config_group}/{self.config_name}"
+        else:
+            return self.config_name

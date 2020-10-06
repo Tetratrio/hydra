@@ -14,16 +14,18 @@ chdir_hydra_root()
 
 
 def compute_defaults_list(
-    config_path: str,
+    element: DefaultElement,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
     # TODO: Should loaded configs be to cached in the repo to avoid loading more than once?
     has_self = False
 
-    loaded = repo.load_config(config_path=config_path, is_primary_config=False)
+    loaded = repo.load_config(
+        config_path=element.config_path(), is_primary_config=False
+    )
     if loaded is None:
         # TODO : add testing for this error (there should already be a similar error)
-        raise ConfigCompositionException(f"Could not load {config_path}")
+        raise ConfigCompositionException(f"Could not load {element.config_path()}")
 
     defaults = loaded.defaults_list
 
@@ -31,7 +33,7 @@ def compute_defaults_list(
         if d.config_name == "_self_":
             if has_self is True:
                 raise ConfigCompositionException(
-                    f"Duplicate _self_ defined in {config_path}"
+                    f"Duplicate _self_ defined in {element.config_path()}"
                 )
             has_self = True
             assert d.config_group is None
@@ -41,22 +43,45 @@ def compute_defaults_list(
 
     ret = []
     for d in defaults:
-        if d.config_name != "_self_":
-            if d.config_group is not None:
-                path = f"{d.config_group}/{d.config_name}"
-            else:
-                path = d.config_name
-            item_defaults = compute_defaults_list(config_path=path, repo=repo)
-            ret.extend(item_defaults)
-        else:
+        if d.config_name == "_self_":
             d = copy.deepcopy(d)
             lpackage = loaded.header["package"]
             package = lpackage if lpackage != "" else None
-            d.config_name = config_path
+            d.config_name = element.config_name
+            d.config_group = element.config_group
             d.package = package
             ret.append(d)
+        else:
+            item_defaults = compute_defaults_list(element=d, repo=repo)
+            ret.extend(item_defaults)
 
-    return ret
+    # remove duplicates, this is probably not good enough and should be done during the loop above
+    # prove with tests later
+
+    # list order is determined by first instance from that config group
+    # selected config group is determined by the last override
+    group_to_choice = {}
+    for idx, d in enumerate(reversed(ret)):
+        if d.config_group is not None:
+            if d.config_group not in group_to_choice:
+                group_to_choice[d.config_group] = d.config_name
+
+    for d in ret:
+        if d.config_group is not None:
+            d.config_name = group_to_choice[d.config_group]
+
+    deduped = []
+    seen_groups = set()
+    for d in ret:
+        # TODO: should this be by group@pkg?
+        if d.config_group is not None:
+            if d.config_group not in seen_groups:
+                seen_groups.add(d.config_group)
+                deduped.append(d)
+        else:
+            deduped.append(d)
+
+    return deduped
 
 
 # registers config source plugins
@@ -64,17 +89,17 @@ Plugins.instance()
 
 
 @pytest.mark.parametrize(  # type: ignore
-    "config_path,expected",
+    "element,expected",
     [
         pytest.param(
-            "no_defaults",
+            DefaultElement(config_name="no_defaults"),
             [
                 DefaultElement(config_name="no_defaults"),
             ],
             id="no_defaults",
         ),
         pytest.param(
-            "duplicate_self",
+            DefaultElement(config_name="duplicate_self"),
             pytest.raises(
                 ConfigCompositionException,
                 match="Duplicate _self_ defined in duplicate_self",
@@ -82,7 +107,7 @@ Plugins.instance()
             id="duplicate_self",
         ),
         pytest.param(
-            "trailing_self",
+            DefaultElement(config_name="trailing_self"),
             [
                 DefaultElement(config_name="no_defaults"),
                 DefaultElement(config_name="trailing_self"),
@@ -90,7 +115,7 @@ Plugins.instance()
             id="trailing_self",
         ),
         pytest.param(
-            "implicit_leading_self",
+            DefaultElement(config_name="implicit_leading_self"),
             [
                 DefaultElement(config_name="implicit_leading_self"),
                 DefaultElement(config_name="no_defaults"),
@@ -98,7 +123,7 @@ Plugins.instance()
             id="implicit_leading_self",
         ),
         pytest.param(
-            "explicit_leading_self",
+            DefaultElement(config_name="explicit_leading_self"),
             [
                 DefaultElement(config_name="explicit_leading_self"),
                 DefaultElement(config_name="no_defaults"),
@@ -106,64 +131,87 @@ Plugins.instance()
             id="explicit_leading_self",
         ),
         pytest.param(
-            "a/a1",
+            DefaultElement(config_name="a/a1"),
             [
                 DefaultElement(config_name="a/a1", package="a"),
             ],
             id="primary_in_config_group_no_defaults",
         ),
         pytest.param(
-            "a/global",
+            DefaultElement(config_group="a", config_name="a1"),
+            [
+                DefaultElement(config_group="a", config_name="a1", package="a"),
+            ],
+            id="primary_in_config_group_no_defaults",
+        ),
+        pytest.param(
+            DefaultElement(config_name="a/global"),
             [
                 DefaultElement(config_name="a/global"),
             ],
             id="a/global",
         ),
         pytest.param(
-            "b/b1",
+            DefaultElement(config_name="b/b1"),
             [
                 DefaultElement(config_name="b/b1", package="b"),
             ],
             id="b/b1",
         ),
         pytest.param(
-            "a/a2",
+            DefaultElement(config_group="b", config_name="b1"),
             [
-                DefaultElement(config_name="a/a2", package="a"),
-                DefaultElement(config_name="b/b1", package="b"),
+                DefaultElement(config_group="b", config_name="b1", package="b"),
+            ],
+            id="b/b1",
+        ),
+        pytest.param(
+            DefaultElement(config_group="a", config_name="a2"),
+            [
+                DefaultElement(config_group="a", config_name="a2", package="a"),
+                DefaultElement(config_group="b", config_name="b1", package="b"),
             ],
             id="a/a2",
         ),
         pytest.param(
-            "recursive_item_explicit_self",
+            DefaultElement(config_name="recursive_item_explicit_self"),
             [
                 DefaultElement(config_name="recursive_item_explicit_self"),
-                DefaultElement(config_name="a/a2", package="a"),
-                DefaultElement(config_name="b/b1", package="b"),
+                DefaultElement(config_group="a", config_name="a2", package="a"),
+                DefaultElement(config_group="b", config_name="b1", package="b"),
             ],
             id="recursive_item_explicit_self",
         ),
         pytest.param(
-            "recursive_item_implicit_self",
+            DefaultElement(config_name="recursive_item_implicit_self"),
             [
                 DefaultElement(config_name="recursive_item_implicit_self"),
-                DefaultElement(config_name="a/a2", package="a"),
-                DefaultElement(config_name="b/b1", package="b"),
+                DefaultElement(config_group="a", config_name="a2", package="a"),
+                DefaultElement(config_group="b", config_name="b1", package="b"),
             ],
             id="recursive_item_implicit_self",
+        ),
+        pytest.param(
+            DefaultElement(config_group="a", config_name="a3"),
+            [
+                DefaultElement(config_group="a", config_name="a3", package="a"),
+                DefaultElement(config_group="c", config_name="c2", package="c"),
+                DefaultElement(config_group="b", config_name="b2", package="b"),
+            ],
+            id="multiple_item_definitions",
         ),
     ],
 )
 def test_recursive_defaults(
-    hydra_restore_singletons: Any, config_path: str, expected: List[Any]
+    hydra_restore_singletons: Any, element: DefaultElement, expected: List[Any]
 ) -> None:
     csp = ConfigSearchPathImpl()
     csp.append(provider="test", path="file://tests/test_data/recursive_defaults_lists")
     repo = ConfigRepository(config_search_path=csp)
 
     if isinstance(expected, list):
-        ret = compute_defaults_list(config_path=config_path, repo=repo)
+        ret = compute_defaults_list(element=element, repo=repo)
         assert ret == expected
     else:
         with expected:
-            compute_defaults_list(config_path=config_path, repo=repo)
+            compute_defaults_list(element=element, repo=repo)
