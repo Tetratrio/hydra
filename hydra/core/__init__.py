@@ -15,3 +15,9 @@ class DefaultElement:
             return f"{self.config_group}/{self.config_name}"
         else:
             return self.config_name
+
+    def fully_qualified_group_name(self) -> str:
+        if self.package is not None:
+            return f"{self.config_group}@{self.package}"
+        else:
+            return f"@{self.package}"

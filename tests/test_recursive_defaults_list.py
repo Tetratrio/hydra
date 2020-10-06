@@ -78,10 +78,10 @@ def compute_defaults_list(
     deduped = []
     seen_groups = set()
     for d in ret:
-        # TODO: should this be by group@pkg?
         if d.config_group is not None:
-            if d.config_group not in seen_groups:
-                seen_groups.add(d.config_group)
+            fqgn = d.fully_qualified_group_name()
+            if fqgn not in seen_groups:
+                seen_groups.add(fqgn)
                 deduped.append(d)
         else:
             deduped.append(d)
@@ -212,6 +212,22 @@ Plugins.instance()
                 DefaultElement(config_group="b", config_name="b1", package="pkg"),
             ],
             id="a/a4_pkg_override_in_config",
+        ),
+        pytest.param(
+            DefaultElement(config_group="b", config_name="b3"),
+            [
+                DefaultElement(config_group="b", config_name="b3", package="foo"),
+            ],
+            id="b/b3",
+        ),
+        pytest.param(
+            DefaultElement(config_group="a", config_name="a5"),
+            [
+                DefaultElement(config_group="a", config_name="a5", package="a"),
+                DefaultElement(config_group="b", config_name="b3", package="foo"),
+                DefaultElement(config_group="b", config_name="b3", package="xyz"),
+            ],
+            id="a/a5",
         ),
     ],
 )
