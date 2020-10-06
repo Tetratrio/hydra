@@ -20,4 +20,16 @@ class DefaultElement:
         if self.package is not None:
             return f"{self.config_group}@{self.package}"
         else:
-            return f"@{self.package}"
+            return f"{self.config_group}"
+
+    def __repr__(self) -> str:
+        if self.config_group is None:
+            if self.package is not None:
+                return f"@{self.package}={self.config_name}"
+            else:
+                return f"{self.config_name}"
+        else:
+            if self.package is not None:
+                return f"{self.config_group}@{self.package}={self.config_name}"
+            else:
+                return f"{self.config_group}={self.config_name}"

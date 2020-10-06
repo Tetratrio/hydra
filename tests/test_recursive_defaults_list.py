@@ -1,7 +1,7 @@
 import copy
 
 import pytest
-from typing import List, Any
+from typing import List, Any, Optional, Dict
 
 from hydra._internal.config_repository import ConfigRepository
 from hydra._internal.config_search_path_impl import ConfigSearchPathImpl
@@ -17,6 +17,38 @@ def compute_element_defaults_list(
     element: DefaultElement,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
+    group_to_choice = {}
+    return _compute_element_defaults_list_impl(
+        element=element,
+        group_to_choice=group_to_choice,
+        repo=repo,
+    )
+
+
+def expand_defaults_list(
+    self_name: Optional[str],
+    defaults: List[DefaultElement],
+    repo: ConfigRepository,
+) -> List[DefaultElement]:
+    group_to_choice = {}
+    for d in reversed(defaults):
+        if d.config_group is not None:
+            if d.fully_qualified_group_name() not in group_to_choice:
+                group_to_choice[d.fully_qualified_group_name()] = d.config_name
+
+    return _expand_defaults_list_impl(
+        self_name=self_name,
+        defaults=defaults,
+        group_to_choice=group_to_choice,
+        repo=repo,
+    )
+
+
+def _compute_element_defaults_list_impl(
+    element: DefaultElement,
+    group_to_choice: Dict[str, str],
+    repo: ConfigRepository,
+) -> List[DefaultElement]:
     # TODO: Should loaded configs be to cached in the repo to avoid loading more than once?
     has_self = False
 
@@ -30,8 +62,9 @@ def compute_element_defaults_list(
     defaults = loaded.defaults_list
 
     if element.package is None:
-        loaded_pacakge = loaded.header["package"]
-        element_package = loaded_pacakge if loaded_pacakge != "" else None
+        # TODO: should we really depend on the loaded package?
+        loaded_package = loaded.header["package"]
+        element_package = loaded_package if loaded_package != "" else None
     else:
         element_package = element.package
 
@@ -54,27 +87,58 @@ def compute_element_defaults_list(
         )
         defaults.insert(0, me)
 
-    ret = []
-    for d in defaults:
-        if d.config_name == "_self_":
-            d = copy.deepcopy(d)
-            d.config_name = element.config_name
-            ret.append(d)
-        else:
-            item_defaults = compute_element_defaults_list(element=d, repo=repo)
-            ret.extend(item_defaults)
+    return _expand_defaults_list_impl(
+        self_name=element.config_name,
+        defaults=defaults,
+        group_to_choice=group_to_choice,
+        repo=repo,
+    )
+
+
+def _expand_defaults_list_impl(
+    self_name: Optional[str],
+    defaults: List[DefaultElement],
+    group_to_choice: Dict[str, str],
+    repo: ConfigRepository,
+) -> List[DefaultElement]:
 
     # list order is determined by first instance from that config group
     # selected config group is determined by the last override
-    group_to_choice = {}
-    for idx, d in enumerate(reversed(ret)):
-        if d.config_group is not None:
-            if d.config_group not in group_to_choice:
-                group_to_choice[d.config_group] = d.config_name
 
-    for d in ret:
-        if d.config_group is not None:
-            d.config_name = group_to_choice[d.config_group]
+    ret = []
+    for d in reversed(defaults):
+        if d.config_name == "_self_":
+            if self_name is None:
+                raise ConfigCompositionException(
+                    "self_name is not specified adn defaults list contains a _self_ item"
+                )
+            d = copy.deepcopy(d)
+            # override self_name
+            if d.fully_qualified_group_name() in group_to_choice:
+                d.config_name = group_to_choice[d.fully_qualified_group_name()]
+            else:
+                d.config_name = self_name
+            added_sublist = [d]
+        else:
+            if d.fully_qualified_group_name() in group_to_choice:
+                d.config_name = group_to_choice[d.fully_qualified_group_name()]
+            item_defaults = _compute_element_defaults_list_impl(
+                element=d,
+                group_to_choice=group_to_choice,
+                repo=repo,
+            )
+            added_sublist = item_defaults
+
+        ret.append(added_sublist)
+
+        for dd in reversed(added_sublist):
+            if dd.config_group is not None:
+                fqgn = dd.fully_qualified_group_name()
+                if fqgn not in group_to_choice:
+                    group_to_choice[fqgn] = dd.config_name
+
+    ret.reverse()
+    ret = [item for sublist in ret for item in sublist]
 
     deduped = []
     seen_groups = set()
@@ -232,8 +296,10 @@ Plugins.instance()
         ),
     ],
 )
-def test_recursive_defaults(
-    hydra_restore_singletons: Any, element: DefaultElement, expected: List[Any]
+def test_compute_element_defaults_list(
+    hydra_restore_singletons: Any,
+    element: DefaultElement,
+    expected: List[DefaultElement],
 ) -> None:
     csp = ConfigSearchPathImpl()
     csp.append(provider="test", path="file://tests/test_data/recursive_defaults_lists")
@@ -245,3 +311,53 @@ def test_recursive_defaults(
     else:
         with expected:
             compute_element_defaults_list(element=element, repo=repo)
+
+
+@pytest.mark.parametrize(  # type: ignore
+    "input_defaults,expected",
+    [
+        pytest.param(
+            [
+                DefaultElement(config_group="a", config_name="a1"),
+                DefaultElement(config_group="a", config_name="a6"),
+            ],
+            [
+                DefaultElement(config_group="a", config_name="a6", package="a"),
+            ],
+            id="simple",
+        ),
+        pytest.param(
+            [
+                DefaultElement(config_group="a", config_name="a2"),
+                DefaultElement(config_group="a", config_name="a6"),
+            ],
+            [
+                DefaultElement(config_group="a", config_name="a6", package="a"),
+            ],
+            id="simple",
+        ),
+        # pytest.param(
+        #     [
+        #         DefaultElement(config_group="a", config_name="a5"),
+        #         DefaultElement(config_group="b", config_name="b1"),
+        #     ],
+        #     [
+        #         DefaultElement(config_group="a", config_name="a5", package="a"),
+        #         DefaultElement(config_group="b", config_name="b1", package="foo"),
+        #         DefaultElement(config_group="b", config_name="b3", package="xyz"),
+        #     ],
+        #     id="a/a5",
+        # ),
+    ],
+)
+def test_expand_defaults_list(
+    hydra_restore_singletons: Any,
+    input_defaults: List[DefaultElement],
+    expected: List[DefaultElement],
+) -> None:
+    csp = ConfigSearchPathImpl()
+    csp.append(provider="test", path="file://tests/test_data/recursive_defaults_lists")
+    repo = ConfigRepository(config_search_path=csp)
+
+    ret = expand_defaults_list(self_name=None, defaults=input_defaults, repo=repo)
+    assert ret == expected
