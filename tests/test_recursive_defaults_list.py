@@ -13,7 +13,7 @@ from hydra.test_utils.test_utils import chdir_hydra_root
 chdir_hydra_root()
 
 
-def compute_elemet_defaults_list(
+def compute_element_defaults_list(
     element: DefaultElement,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
@@ -29,6 +29,12 @@ def compute_elemet_defaults_list(
 
     defaults = loaded.defaults_list
 
+    if element.package is None:
+        loaded_pacakge = loaded.header["package"]
+        element_package = loaded_pacakge if loaded_pacakge != "" else None
+    else:
+        element_package = element.package
+
     for d in defaults:
         if d.config_name == "_self_":
             if has_self is True:
@@ -38,24 +44,13 @@ def compute_elemet_defaults_list(
             has_self = True
             assert d.config_group is None
             d.config_group = element.config_group
-            if element.package is None:
-                lpackage = loaded.header["package"]
-                package = lpackage if lpackage != "" else None
-            else:
-                package = element.package
-            d.package = package
+            d.package = element_package
 
     if not has_self:
-        if element.package is None:
-            lpackage = loaded.header["package"]
-            package = lpackage if lpackage != "" else None
-        else:
-            package = element.package
-
         me = DefaultElement(
             config_group=element.config_group,
             config_name="_self_",
-            package=package,
+            package=element_package,
         )
         defaults.insert(0, me)
 
@@ -66,7 +61,7 @@ def compute_elemet_defaults_list(
             d.config_name = element.config_name
             ret.append(d)
         else:
-            item_defaults = compute_elemet_defaults_list(element=d, repo=repo)
+            item_defaults = compute_element_defaults_list(element=d, repo=repo)
             ret.extend(item_defaults)
 
     # list order is determined by first instance from that config group
@@ -245,8 +240,8 @@ def test_recursive_defaults(
     repo = ConfigRepository(config_search_path=csp)
 
     if isinstance(expected, list):
-        ret = compute_elemet_defaults_list(element=element, repo=repo)
+        ret = compute_element_defaults_list(element=element, repo=repo)
         assert ret == expected
     else:
         with expected:
-            compute_elemet_defaults_list(element=element, repo=repo)
+            compute_element_defaults_list(element=element, repo=repo)
