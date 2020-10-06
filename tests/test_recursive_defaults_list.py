@@ -37,19 +37,24 @@ def compute_defaults_list(
                 )
             has_self = True
             assert d.config_group is None
+            d.config_group = element.config_group
 
     if not has_self:
-        defaults.insert(0, DefaultElement(config_name="_self_"))
+        me = DefaultElement(
+            config_group=element.config_group,
+            config_name="_self_",
+            package=element.package,
+        )
+        defaults.insert(0, me)
 
     ret = []
     for d in defaults:
         if d.config_name == "_self_":
             d = copy.deepcopy(d)
-            lpackage = loaded.header["package"]
-            package = lpackage if lpackage != "" else None
+            if d.package is None:
+                lpackage = loaded.header["package"]
+                d.package = lpackage if lpackage != "" else None
             d.config_name = element.config_name
-            d.config_group = element.config_group
-            d.package = package
             ret.append(d)
         else:
             item_defaults = compute_defaults_list(element=d, repo=repo)
@@ -199,6 +204,14 @@ Plugins.instance()
                 DefaultElement(config_group="b", config_name="b2", package="b"),
             ],
             id="multiple_item_definitions",
+        ),
+        pytest.param(
+            DefaultElement(config_group="a", config_name="a4"),
+            [
+                DefaultElement(config_group="a", config_name="a4", package="a"),
+                DefaultElement(config_group="b", config_name="b1", package="pkg"),
+            ],
+            id="a/a4_pkg_override_in_config",
         ),
     ],
 )
