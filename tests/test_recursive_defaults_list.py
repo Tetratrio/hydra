@@ -13,7 +13,7 @@ from hydra.test_utils.test_utils import chdir_hydra_root
 chdir_hydra_root()
 
 
-def compute_defaults_list(
+def compute_elemet_defaults_list(
     element: DefaultElement,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
@@ -38,12 +38,24 @@ def compute_defaults_list(
             has_self = True
             assert d.config_group is None
             d.config_group = element.config_group
+            if element.package is None:
+                lpackage = loaded.header["package"]
+                package = lpackage if lpackage != "" else None
+            else:
+                package = element.package
+            d.package = package
 
     if not has_self:
+        if element.package is None:
+            lpackage = loaded.header["package"]
+            package = lpackage if lpackage != "" else None
+        else:
+            package = element.package
+
         me = DefaultElement(
             config_group=element.config_group,
             config_name="_self_",
-            package=element.package,
+            package=package,
         )
         defaults.insert(0, me)
 
@@ -51,17 +63,11 @@ def compute_defaults_list(
     for d in defaults:
         if d.config_name == "_self_":
             d = copy.deepcopy(d)
-            if d.package is None:
-                lpackage = loaded.header["package"]
-                d.package = lpackage if lpackage != "" else None
             d.config_name = element.config_name
             ret.append(d)
         else:
-            item_defaults = compute_defaults_list(element=d, repo=repo)
+            item_defaults = compute_elemet_defaults_list(element=d, repo=repo)
             ret.extend(item_defaults)
-
-    # remove duplicates, this is probably not good enough and should be done during the loop above
-    # prove with tests later
 
     # list order is determined by first instance from that config group
     # selected config group is determined by the last override
@@ -239,8 +245,8 @@ def test_recursive_defaults(
     repo = ConfigRepository(config_search_path=csp)
 
     if isinstance(expected, list):
-        ret = compute_defaults_list(element=element, repo=repo)
+        ret = compute_elemet_defaults_list(element=element, repo=repo)
         assert ret == expected
     else:
         with expected:
-            compute_defaults_list(element=element, repo=repo)
+            compute_elemet_defaults_list(element=element, repo=repo)
