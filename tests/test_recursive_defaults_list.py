@@ -267,7 +267,7 @@ Plugins.instance()
             DefaultElement(config_group="a", config_name="a4"),
             [
                 DefaultElement(config_group="a", config_name="a4"),
-                DefaultElement(config_group="b", config_name="b1", package="pkg"),
+                DefaultElement(config_group="b", config_name="b1", package="file_pkg"),
             ],
             id="a/a4_pkg_override_in_config",
         ),
@@ -283,7 +283,7 @@ Plugins.instance()
             [
                 DefaultElement(config_group="a", config_name="a5"),
                 DefaultElement(config_group="b", config_name="b3"),
-                DefaultElement(config_group="b", config_name="b3", package="xyz"),
+                DefaultElement(config_group="b", config_name="b3", package="file_pkg"),
             ],
             id="a/a5",
         ),
@@ -329,18 +329,19 @@ def test_compute_element_defaults_list(
             ],
             id="simple",
         ),
-        # pytest.param(
-        #     [
-        #         DefaultElement(config_group="a", config_name="a5"),
-        #         DefaultElement(config_group="b", config_name="b1"),
-        #     ],
-        #     [
-        #         DefaultElement(config_group="a", config_name="a5", package="a"),
-        #         DefaultElement(config_group="b", config_name="b1", package="foo"),
-        #         DefaultElement(config_group="b", config_name="b3", package="xyz"),
-        #     ],
-        #     id="a/a5",
-        # ),
+        pytest.param(
+            [
+                DefaultElement(config_group="a", config_name="a5"),
+                DefaultElement(config_group="b", config_name="b1"),
+                DefaultElement(config_group="b", package="file_pkg", config_name="b1"),
+            ],
+            [
+                DefaultElement(config_group="a", config_name="a5"),
+                DefaultElement(config_group="b", config_name="b1"),
+                DefaultElement(config_group="b", config_name="b1", package="file_pkg"),
+            ],
+            id="a/a5",
+        ),
     ],
 )
 def test_expand_defaults_list(

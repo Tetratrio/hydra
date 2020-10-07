@@ -2,4 +2,4 @@
 defaults:
   - _self_
   - b: b3
-  - b@xyz: b3    
+  - b@file_pkg: b3    
