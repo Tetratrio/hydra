@@ -61,13 +61,6 @@ def _compute_element_defaults_list_impl(
 
     defaults = loaded.defaults_list
 
-    if element.package is None:
-        # TODO: should we really depend on the loaded package?
-        loaded_package = loaded.header["package"]
-        element_package = loaded_package if loaded_package != "" else None
-    else:
-        element_package = element.package
-
     for d in defaults:
         if d.config_name == "_self_":
             if has_self is True:
@@ -77,13 +70,13 @@ def _compute_element_defaults_list_impl(
             has_self = True
             assert d.config_group is None
             d.config_group = element.config_group
-            d.package = element_package
+            d.package = element.package
 
     if not has_self:
         me = DefaultElement(
             config_group=element.config_group,
             config_name="_self_",
-            package=element_package,
+            package=element.package,
         )
         defaults.insert(0, me)
 
@@ -203,14 +196,14 @@ Plugins.instance()
         pytest.param(
             DefaultElement(config_name="a/a1"),
             [
-                DefaultElement(config_name="a/a1", package="a"),
+                DefaultElement(config_name="a/a1"),
             ],
             id="primary_in_config_group_no_defaults",
         ),
         pytest.param(
             DefaultElement(config_group="a", config_name="a1"),
             [
-                DefaultElement(config_group="a", config_name="a1", package="a"),
+                DefaultElement(config_group="a", config_name="a1"),
             ],
             id="primary_in_config_group_no_defaults",
         ),
@@ -224,22 +217,22 @@ Plugins.instance()
         pytest.param(
             DefaultElement(config_name="b/b1"),
             [
-                DefaultElement(config_name="b/b1", package="b"),
+                DefaultElement(config_name="b/b1"),
             ],
             id="b/b1",
         ),
         pytest.param(
             DefaultElement(config_group="b", config_name="b1"),
             [
-                DefaultElement(config_group="b", config_name="b1", package="b"),
+                DefaultElement(config_group="b", config_name="b1"),
             ],
             id="b/b1",
         ),
         pytest.param(
             DefaultElement(config_group="a", config_name="a2"),
             [
-                DefaultElement(config_group="a", config_name="a2", package="a"),
-                DefaultElement(config_group="b", config_name="b1", package="b"),
+                DefaultElement(config_group="a", config_name="a2"),
+                DefaultElement(config_group="b", config_name="b1"),
             ],
             id="a/a2",
         ),
@@ -247,8 +240,8 @@ Plugins.instance()
             DefaultElement(config_name="recursive_item_explicit_self"),
             [
                 DefaultElement(config_name="recursive_item_explicit_self"),
-                DefaultElement(config_group="a", config_name="a2", package="a"),
-                DefaultElement(config_group="b", config_name="b1", package="b"),
+                DefaultElement(config_group="a", config_name="a2"),
+                DefaultElement(config_group="b", config_name="b1"),
             ],
             id="recursive_item_explicit_self",
         ),
@@ -256,24 +249,24 @@ Plugins.instance()
             DefaultElement(config_name="recursive_item_implicit_self"),
             [
                 DefaultElement(config_name="recursive_item_implicit_self"),
-                DefaultElement(config_group="a", config_name="a2", package="a"),
-                DefaultElement(config_group="b", config_name="b1", package="b"),
+                DefaultElement(config_group="a", config_name="a2"),
+                DefaultElement(config_group="b", config_name="b1"),
             ],
             id="recursive_item_implicit_self",
         ),
         pytest.param(
             DefaultElement(config_group="a", config_name="a3"),
             [
-                DefaultElement(config_group="a", config_name="a3", package="a"),
-                DefaultElement(config_group="c", config_name="c2", package="c"),
-                DefaultElement(config_group="b", config_name="b2", package="b"),
+                DefaultElement(config_group="a", config_name="a3"),
+                DefaultElement(config_group="c", config_name="c2"),
+                DefaultElement(config_group="b", config_name="b2"),
             ],
             id="multiple_item_definitions",
         ),
         pytest.param(
             DefaultElement(config_group="a", config_name="a4"),
             [
-                DefaultElement(config_group="a", config_name="a4", package="a"),
+                DefaultElement(config_group="a", config_name="a4"),
                 DefaultElement(config_group="b", config_name="b1", package="pkg"),
             ],
             id="a/a4_pkg_override_in_config",
@@ -281,15 +274,15 @@ Plugins.instance()
         pytest.param(
             DefaultElement(config_group="b", config_name="b3"),
             [
-                DefaultElement(config_group="b", config_name="b3", package="foo"),
+                DefaultElement(config_group="b", config_name="b3"),
             ],
             id="b/b3",
         ),
         pytest.param(
             DefaultElement(config_group="a", config_name="a5"),
             [
-                DefaultElement(config_group="a", config_name="a5", package="a"),
-                DefaultElement(config_group="b", config_name="b3", package="foo"),
+                DefaultElement(config_group="a", config_name="a5"),
+                DefaultElement(config_group="b", config_name="b3"),
                 DefaultElement(config_group="b", config_name="b3", package="xyz"),
             ],
             id="a/a5",
@@ -322,7 +315,7 @@ def test_compute_element_defaults_list(
                 DefaultElement(config_group="a", config_name="a6"),
             ],
             [
-                DefaultElement(config_group="a", config_name="a6", package="a"),
+                DefaultElement(config_group="a", config_name="a6"),
             ],
             id="simple",
         ),
@@ -332,7 +325,7 @@ def test_compute_element_defaults_list(
                 DefaultElement(config_group="a", config_name="a6"),
             ],
             [
-                DefaultElement(config_group="a", config_name="a6", package="a"),
+                DefaultElement(config_group="a", config_name="a6"),
             ],
             id="simple",
         ),
