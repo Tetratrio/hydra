@@ -50,6 +50,7 @@ def _compute_element_defaults_list_impl(
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
     # TODO: Should loaded configs be to cached in the repo to avoid loading more than once?
+    #  Ensure new approach does not cause the same config to be loaded more than once.
     has_self = False
 
     loaded = repo.load_config(
@@ -286,6 +287,22 @@ Plugins.instance()
                 DefaultElement(config_group="b", config_name="b3", package="file_pkg"),
             ],
             id="a/a5",
+        ),
+        pytest.param(
+            DefaultElement(config_group="b", config_name="base_from_a"),
+            [
+                DefaultElement(config_name="a/a1"),
+                DefaultElement(config_group="b", config_name="base_from_a"),
+            ],
+            id="b/base_from_a",
+        ),
+        pytest.param(
+            DefaultElement(config_group="b", config_name="base_from_b"),
+            [
+                DefaultElement(config_name="b/b1"),
+                DefaultElement(config_group="b", config_name="base_from_b"),
+            ],
+            id="b/base_from_b",
         ),
     ],
 )
