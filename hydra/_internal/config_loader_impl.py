@@ -20,6 +20,7 @@ from omegaconf.errors import (
 )
 
 from hydra._internal.config_repository import ConfigRepository
+from hydra._internal.defaults_list import expand_defaults_list
 from hydra.core import DefaultElement
 from hydra.core.config_loader import ConfigLoader, LoadTrace
 from hydra.core.config_search_path import ConfigSearchPath
@@ -77,6 +78,7 @@ class ConfigLoaderImpl(ConfigLoader):
                 config_group_overrides.append(override)
         return config_group_overrides, config_overrides
 
+    # TODO: del once new defaults processing is integrated
     def missing_config_error(
         self, config_name: Optional[str], msg: str, with_search_path: bool
     ) -> None:
@@ -198,6 +200,27 @@ class ConfigLoaderImpl(ConfigLoader):
 
         config_group_overrides, config_overrides = self.split_by_override_type(
             config_overrides
+        )
+
+        input_defaults = [
+            DefaultElement(config_name="hydra_config"),
+            DefaultElement(config_name=config_name),
+        ]
+
+        for override in config_group_overrides:
+            value = override.value()
+            assert isinstance(value, str)
+            default = DefaultElement(
+                config_group=override.key_or_group,
+                config_name=value,
+                package=override.get_subject_package(),
+            )
+            input_defaults.append(default)
+
+        new_defaults = expand_defaults_list(
+            self_name=None,
+            defaults=input_defaults,
+            repo=self.repository,
         )
 
         # Load hydra config

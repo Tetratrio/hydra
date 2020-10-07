@@ -3,7 +3,7 @@ from typing import Dict, List, Optional
 
 from hydra._internal.config_repository import ConfigRepository
 from hydra.core import DefaultElement
-from hydra.errors import ConfigCompositionException
+from hydra.errors import ConfigCompositionException, MissingConfigException
 
 
 def compute_element_defaults_list(
@@ -49,11 +49,15 @@ def _compute_element_defaults_list_impl(
     loaded = repo.load_config(
         config_path=element.config_path(), is_primary_config=False
     )
-    if loaded is None:
-        # TODO : add testing for this error (there should already be a similar error)
-        raise ConfigCompositionException(f"Could not load {element.config_path()}")
+    if loaded is None and not element.optional:
+        missing_config_error(
+            repo=repo,
+            config_name=element.config_path(),
+            msg=f"Cannot find config : {element.config_path()}, check that it's in your config search path",
+            with_search_path=True,
+        )
 
-    defaults = loaded.defaults_list
+    defaults = loaded.defaults_list if loaded is not None else []
 
     for d in defaults:
         if d.config_name == "_self_":
@@ -139,3 +143,26 @@ def _expand_defaults_list_impl(
             deduped.append(d)
 
     return deduped
+
+
+def missing_config_error(
+    repo: ConfigRepository,
+    config_name: Optional[str],
+    msg: str,
+    with_search_path: bool,
+) -> None:
+    def add_search_path() -> str:
+        descs = []
+        for src in repo.get_sources():
+            if src.provider != "schema":
+                descs.append(f"\t{repr(src)}")
+        lines = "\n".join(descs)
+
+        if with_search_path:
+            return msg + "\nSearch path:" + f"\n{lines}"
+        else:
+            return msg
+
+    raise MissingConfigException(
+        missing_cfg_file=config_name, message=add_search_path()
+    )
