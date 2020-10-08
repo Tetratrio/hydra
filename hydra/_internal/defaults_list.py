@@ -87,17 +87,57 @@ def _compute_element_defaults_list_impl(
     )
 
 
+def _find_match_before(
+    defaults: List[DefaultElement], like: DefaultElement
+) -> Optional[DefaultElement]:
+    fqgn = like.fully_qualified_group_name()
+    for d2 in defaults:
+        if d2 == like:
+            break
+        if d2.fully_qualified_group_name() == fqgn:
+            return d2
+    return None
+
+
 def _verify_no_add_conflicts(defaults: List[DefaultElement]) -> None:
+
     for d in reversed(defaults):
-        if d.is_add_only:
+        if d.from_override:
             fqgn = d.fully_qualified_group_name()
-            for d2 in defaults:
-                if d2 == d:
-                    break
-                if d2.fully_qualified_group_name() == fqgn:
-                    raise ConfigCompositionException(
-                        f"Could not add '{fqgn}={d.config_name}'. '{fqgn}' is already in the defaults list."
-                    )
+            match = _find_match_before(defaults, d)
+            if d.is_add_only and match is not None:
+                raise ConfigCompositionException(
+                    f"Could not add '{fqgn}={d.config_name}'. '{fqgn}' is already in the defaults list."
+                )
+            if not d.is_add_only and match is None:
+                msg = (
+                    f"Could not override '{fqgn}'. No match in the defaults list."
+                    f"\nTo append to your default list use +{fqgn}={d.config_name}"
+                )
+                raise ConfigCompositionException(msg)
+
+
+def _process_renames(defaults: List[DefaultElement]) -> None:
+    while True:
+        last_rename_index = -1
+        for idx, d in reversed(list(enumerate(defaults))):
+            if d.is_package_rename():
+                last_rename_index = idx
+                break
+        if last_rename_index != -1:
+            rename = defaults.pop(last_rename_index)
+            renamed = False
+            for d in defaults:
+                if is_matching(rename, d):
+                    d.package = rename.get_subject_package()
+                    renamed = True
+            if not renamed:
+                raise ConfigCompositionException(
+                    f"Could not rename package. "
+                    f"No match for '{rename.config_group}@{rename.package}' in the defaults list"
+                )
+        else:
+            break
 
 
 def _expand_defaults_list_impl(
@@ -125,12 +165,19 @@ def _expand_defaults_list_impl(
                 d.config_name = self_name
             added_sublist = [d]
         elif d.is_package_rename():
+            # TODO: can always defer if from overrides and be done with it?
             added_sublist = [d]  # defer
         elif d.is_add_only:
+            # TODO: what happens if this also needed to be expanded if it passes validation
+            added_sublist = [d]  # defer
+        elif d.from_override:
             added_sublist = [d]  # defer
         else:
-            if d.fully_qualified_group_name() in group_to_choice:
-                d.config_name = group_to_choice[d.fully_qualified_group_name()]
+            fqgn = d.fully_qualified_group_name()
+            if fqgn in group_to_choice:
+                new_config_name = group_to_choice[fqgn]
+                if new_config_name != d.config_name:
+                    d.config_name = new_config_name
             item_defaults = _compute_element_defaults_list_impl(
                 element=d,
                 group_to_choice=group_to_choice,
@@ -149,29 +196,7 @@ def _expand_defaults_list_impl(
     ret.reverse()
     ret = [item for sublist in ret for item in sublist]
 
-    # process package renames:
-    while True:
-        last_rename_index = -1
-        for idx, d in reversed(list(enumerate(ret))):
-            if d.is_package_rename():
-                last_rename_index = idx
-                break
-        if last_rename_index != -1:
-            rename = ret.pop(last_rename_index)
-            renamed = False
-            for d in ret:
-                if is_matching(rename, d):
-                    d.package = rename.get_subject_package()
-                    renamed = True
-            if not renamed:
-                raise ConfigCompositionException(
-                    f"Could not rename package. "
-                    f"No match for '{rename.config_group}@{rename.package}' in the defaults list"
-                )
-
-        else:
-            break
-
+    _process_renames(ret)
     _verify_no_add_conflicts(ret)
 
     deduped = []

@@ -13,6 +13,10 @@ class DefaultElement:
     # used in package rename
     package2: Optional[str] = None
 
+    # True for default elements that are from overrides.
+    # Those have somewhat different semantics
+    from_override: bool = False
+
     # set to True for external overrides with +
     is_add_only: bool = False
 

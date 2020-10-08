@@ -12,7 +12,7 @@ from hydra.core import DefaultElement
 from hydra.core.override_parser.overrides_parser import OverridesParser
 from hydra.core.override_parser.types import Override
 from hydra.core.plugins import Plugins
-from hydra.errors import ConfigCompositionException, HydraException
+from hydra.errors import ConfigCompositionException
 from hydra.test_utils.test_utils import chdir_hydra_root
 
 chdir_hydra_root()
@@ -306,12 +306,14 @@ def convert_overrides_to_defaults(
                 config_name=value,
                 package=override.pkg1,
                 package2=override.pkg2,
+                from_override=True,
             )
         else:
             default = DefaultElement(
                 config_group=override.key_or_group,
                 config_name=value,
                 package=override.get_subject_package(),
+                from_override=True,
             )
         if override.is_add():
             default.is_add_only = True
@@ -360,7 +362,7 @@ def convert_overrides_to_defaults(
             "test_overrides",
             ["a@XXX:dest=a6"],
             pytest.raises(
-                HydraException,
+                ConfigCompositionException,
                 match=re.escape(
                     "Could not rename package. No match for 'a@XXX' in the defaults list"
                 ),
@@ -373,7 +375,12 @@ def convert_overrides_to_defaults(
             ["+b=b1"],
             [
                 DefaultElement(config_name="no_defaults"),
-                DefaultElement(config_group="b", config_name="b1", is_add_only=True),
+                DefaultElement(
+                    config_group="b",
+                    config_name="b1",
+                    is_add_only=True,
+                    from_override=True,
+                ),
             ],
             id="adding_item",
         ),
@@ -386,7 +393,11 @@ def convert_overrides_to_defaults(
                 DefaultElement(config_group="a", package="pkg", config_name="a1"),
                 DefaultElement(config_group="c", config_name="c1"),
                 DefaultElement(
-                    config_group="b", package="pkg", config_name="b1", is_add_only=True
+                    config_group="b",
+                    package="pkg",
+                    config_name="b1",
+                    is_add_only=True,
+                    from_override=True,
                 ),
             ],
             id="adding_item_at_package",
@@ -395,7 +406,7 @@ def convert_overrides_to_defaults(
             "one_missing_item",
             ["+a=a1"],
             pytest.raises(
-                HydraException,
+                ConfigCompositionException,
                 match=re.escape(
                     "Could not add 'a=a1'. 'a' is already in the defaults list."
                 ),
@@ -406,7 +417,7 @@ def convert_overrides_to_defaults(
             "test_overrides",
             ["+a=a2"],
             pytest.raises(
-                HydraException,
+                ConfigCompositionException,
                 match=re.escape(
                     "Could not add 'a=a2'. 'a' is already in the defaults list."
                 ),
@@ -415,9 +426,9 @@ def convert_overrides_to_defaults(
         ),
         pytest.param(
             "test_overrides",
-            ["a=a6", "+c=c2"],
+            ["+a=a6", "+c=c2"],
             pytest.raises(
-                HydraException,
+                ConfigCompositionException,
                 match=re.escape(
                     "Could not add 'c=c2'. 'c' is already in the defaults list."
                 ),
@@ -428,36 +439,36 @@ def convert_overrides_to_defaults(
             "test_overrides",
             ["+a@pkg:pkg2=a1"],
             pytest.raises(
-                HydraException,
+                ConfigCompositionException,
                 match=re.escape(
                     "Add syntax does not support package rename, remove + prefix"
                 ),
             ),
             id="add_rename_error",
         ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["+db@src=mysql"],
-        #             pytest.raises(
-        #                 HydraException,
-        #                 match=re.escape(
-        #                     "Could not add 'db@src=mysql'. 'db@src' is already in the defaults list."
-        #                 ),
-        #             ),
-        #             id="adding_duplicate_item",
-        #         ),
-        #         pytest.param(
-        #             [],
-        #             ["db=mysql"],
-        #             pytest.raises(
-        #                 HydraException,
-        #                 match=re.escape(
-        #                     "Could not override 'db'. No match in the defaults list."
-        #                     "\nTo append to your default list use +db=mysql"
-        #                 ),
-        #             ),
-        #             id="adding_without_plus",
-        #         ),
+        pytest.param(
+            "test_overrides",
+            ["+a@pkg=a2"],
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Could not add 'a@pkg=a2'. 'a@pkg' is already in the defaults list."
+                ),
+            ),
+            id="adding_duplicate_item@pkg",
+        ),
+        pytest.param(
+            "no_defaults",
+            ["c=c1"],
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Could not override 'c'. No match in the defaults list."
+                    "\nTo append to your default list use +c=c1"
+                ),
+            ),
+            id="adding_without_plus",
+        ),
         #         # deleting item
         #         pytest.param(
         #             [],
@@ -545,11 +556,11 @@ def test_apply_overrides_to_defaults(
         parser = OverridesParser.create()
         parsed_overrides = parser.parse_overrides(overrides=overrides)
         overrides_as_defaults = convert_overrides_to_defaults(parsed_overrides)
-        defaults = [
+        ret = [
             DefaultElement(config_name=config_with_defaults),
         ]
-        defaults.extend(overrides_as_defaults)
-        return defaults
+        ret.extend(overrides_as_defaults)
+        return ret
 
     if isinstance(expected, list):
         defaults = create_defaults()
