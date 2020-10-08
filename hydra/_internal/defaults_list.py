@@ -87,6 +87,19 @@ def _compute_element_defaults_list_impl(
     )
 
 
+def _verify_no_add_conflicts(defaults: List[DefaultElement]) -> None:
+    for d in reversed(defaults):
+        if d.is_add_only:
+            fqgn = d.fully_qualified_group_name()
+            for d2 in defaults:
+                if d2 == d:
+                    break
+                if d2.fully_qualified_group_name() == fqgn:
+                    raise ConfigCompositionException(
+                        f"Could not add '{fqgn}={d.config_name}'. '{fqgn}' is already in the defaults list."
+                    )
+
+
 def _expand_defaults_list_impl(
     self_name: Optional[str],
     defaults: List[DefaultElement],
@@ -112,7 +125,9 @@ def _expand_defaults_list_impl(
                 d.config_name = self_name
             added_sublist = [d]
         elif d.is_package_rename():
-            added_sublist = [d]
+            added_sublist = [d]  # defer
+        elif d.is_add_only:
+            added_sublist = [d]  # defer
         else:
             if d.fully_qualified_group_name() in group_to_choice:
                 d.config_name = group_to_choice[d.fully_qualified_group_name()]
@@ -143,11 +158,21 @@ def _expand_defaults_list_impl(
                 break
         if last_rename_index != -1:
             rename = ret.pop(last_rename_index)
+            renamed = False
             for d in ret:
                 if is_matching(rename, d):
                     d.package = rename.get_subject_package()
+                    renamed = True
+            if not renamed:
+                raise ConfigCompositionException(
+                    f"Could not rename package. "
+                    f"No match for '{rename.config_group}@{rename.package}' in the defaults list"
+                )
+
         else:
             break
+
+    _verify_no_add_conflicts(ret)
 
     deduped = []
     seen_groups = set()

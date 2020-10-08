@@ -1,4 +1,5 @@
 import pytest
+import re
 from typing import List, Any
 
 from hydra._internal.config_repository import ConfigRepository
@@ -11,12 +12,12 @@ from hydra.core import DefaultElement
 from hydra.core.override_parser.overrides_parser import OverridesParser
 from hydra.core.override_parser.types import Override
 from hydra.core.plugins import Plugins
-from hydra.errors import ConfigCompositionException
-from hydra.plugins.config_source import ConfigSource
+from hydra.errors import ConfigCompositionException, HydraException
 from hydra.test_utils.test_utils import chdir_hydra_root
-from omegaconf import OmegaConf
 
 chdir_hydra_root()
+
+# TODO: should error indicate the default is coming from? (overrides, specific file's defaults?)
 
 
 # registers config source plugins
@@ -207,6 +208,16 @@ Plugins.instance()
             ],
             id="rename_package_and_change_option",
         ),
+        pytest.param(
+            DefaultElement(config_group="rename", config_name="r5"),
+            [
+                DefaultElement(config_group="rename", config_name="r5"),
+                DefaultElement(config_name="rename/r4"),
+                DefaultElement(config_group="b", package="pkg2", config_name="b4"),
+                DefaultElement(config_group="a", config_name="a1"),
+            ],
+            id="rename_package_and_change_option",
+        ),
     ],
 )
 def test_compute_element_defaults_list(
@@ -297,6 +308,8 @@ def convert_overrides_to_defaults(
                 config_name=value,
                 package=override.get_subject_package(),
             )
+        if override.is_add():
+            default.is_add_only = True
         ret.append(default)
     return ret
 
@@ -327,46 +340,63 @@ def convert_overrides_to_defaults(
             ],
             id="change_both",
         ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["db@:dest=postgresql"],
-        #             [
-        #                 {"db@dest": "postgresql"},
-        #                 {"db@src": "mysql"},
-        #                 {"hydra/launcher": "basic"},
-        #             ],
-        #             id="change_both",
-        #         ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["db@src:dest=postgresql"],
-        #             [{"db": "mysql"}, {"db@dest": "postgresql"}, {"hydra/launcher": "basic"}],
-        #             id="change_both",
-        #         ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["db@XXX:dest=postgresql"],
-        #             pytest.raises(
-        #                 HydraException,
-        #                 match=re.escape(
-        #                     "Could not rename package. No match for 'db@XXX' in the defaults list."
-        #                 ),
-        #             ),
-        #             id="change_both_invalid_package",
-        #         ),
-        #         # adding item
-        #         pytest.param([], ["+db=mysql"], [{"db": "mysql"}], id="adding_item"),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["+db@backup=mysql"],
-        #             [
-        #                 {"db": "mysql"},
-        #                 {"db@src": "mysql"},
-        #                 {"hydra/launcher": "basic"},
-        #                 {"db@backup": "mysql"},
-        #             ],
-        #             id="adding_item_at_package",
-        #         ),
+        pytest.param(
+            "test_overrides",
+            ["a@pkg:pkg2=a6"],
+            [
+                DefaultElement(config_name="test_overrides"),
+                DefaultElement(config_group="a", config_name="a1"),
+                DefaultElement(config_group="a", package="pkg2", config_name="a6"),
+                DefaultElement(config_group="c", config_name="c1"),
+            ],
+            id="change_both",
+        ),
+        pytest.param(
+            "test_overrides",
+            ["a@XXX:dest=a6"],
+            pytest.raises(
+                HydraException,
+                match=re.escape(
+                    "Could not rename package. No match for 'a@XXX' in the defaults list"
+                ),
+            ),
+            id="change_both_invalid_package",
+        ),
+        # adding item
+        pytest.param(
+            "no_defaults",
+            ["+b=b1"],
+            [
+                DefaultElement(config_name="no_defaults"),
+                DefaultElement(config_group="b", config_name="b1", is_add_only=True),
+            ],
+            id="adding_item",
+        ),
+        pytest.param(
+            "test_overrides",
+            ["+b@pkg=b1"],
+            [
+                DefaultElement(config_name="test_overrides"),
+                DefaultElement(config_group="a", config_name="a1"),
+                DefaultElement(config_group="a", package="pkg", config_name="a1"),
+                DefaultElement(config_group="c", config_name="c1"),
+                DefaultElement(
+                    config_group="b", package="pkg", config_name="b1", is_add_only=True
+                ),
+            ],
+            id="adding_item_at_package",
+        ),
+        pytest.param(
+            "one_missing_item",
+            ["+a=a1"],
+            pytest.raises(
+                HydraException,
+                match=re.escape(
+                    "Could not add 'a=a1'. 'a' is already in the defaults list."
+                ),
+            ),
+            id="adding_duplicate_item",
+        ),
         #         pytest.param(
         #             defaults_list,
         #             ["+db=mysql"],
@@ -496,18 +526,16 @@ def test_apply_overrides_to_defaults(
     repo = ConfigRepository(config_search_path=csp)
 
     parser = OverridesParser.create()
+    parsed_overrides = parser.parse_overrides(overrides=overrides)
+    overrides_as_defaults = convert_overrides_to_defaults(parsed_overrides)
+    defaults = [
+        DefaultElement(config_name=config_with_defaults),
+    ]
+    defaults.extend(overrides_as_defaults)
+
     if isinstance(expected, list):
-        parsed_overrides = parser.parse_overrides(overrides=overrides)
-        overrides_as_defaults = convert_overrides_to_defaults(parsed_overrides)
-        defaults = [
-            DefaultElement(config_name=config_with_defaults),
-        ]
-        defaults.extend(overrides_as_defaults)
         ret = expand_defaults_list(self_name=None, defaults=defaults, repo=repo)
         assert ret == expected
     else:
         with expected:
-            parsed_overrides = parser.parse_overrides(overrides=overrides)
-            # ConfigLoaderImpl._apply_overrides_to_defaults(
-            #     overrides=parsed_overrides, defaults=defaults
-            # )
+            expand_defaults_list(self_name=None, defaults=defaults, repo=repo)

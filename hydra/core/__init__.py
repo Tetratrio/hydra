@@ -13,6 +13,9 @@ class DefaultElement:
     # used in package rename
     package2: Optional[str] = None
 
+    # set to True for external overrides with +
+    is_add_only: bool = False
+
     def config_path(self) -> str:
         if self.config_group is not None:
             return f"{self.config_group}/{self.config_name}"
@@ -43,10 +46,9 @@ class DefaultElement:
                 ret = f"{self.config_group}@{package}={self.config_name}"
             else:
                 ret = f"{self.config_group}={self.config_name}"
-        if self.is_package_rename():
-            return f"package_rename: {ret}"
-        else:
-            return ret
+        if self.is_add_only:
+            ret = f"+{ret}"
+        return ret
 
     def is_package_rename(self) -> bool:
         return self.package2 is not None
