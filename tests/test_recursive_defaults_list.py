@@ -385,6 +385,21 @@ def convert_overrides_to_defaults(
             id="adding_item",
         ),
         pytest.param(
+            "no_defaults",
+            ["+b=b2"],
+            [
+                DefaultElement(config_name="no_defaults"),
+                DefaultElement(
+                    config_group="b",
+                    config_name="b2",
+                    is_add_only=True,
+                    from_override=True,
+                ),
+                DefaultElement(config_group="c", config_name="c2"),
+            ],
+            id="adding_item_recursive",
+        ),
+        pytest.param(
             "test_overrides",
             ["+b@pkg=b1"],
             [
