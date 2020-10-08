@@ -252,7 +252,9 @@ class ConfigSource(Plugin):
           - optimizer: nesterov
         """
 
-        def _split_group(group_with_package: str) -> Tuple[str, Optional[str]]:
+        def _split_group(
+            group_with_package: str,
+        ) -> Tuple[str, Optional[str], Optional[str]]:
             idx = group_with_package.find("@")
             if idx == -1:
                 # group
@@ -263,7 +265,21 @@ class ConfigSource(Plugin):
                 group = group_with_package[0:idx]
                 package = group_with_package[idx + 1 :]
 
-            return group, package
+            package2 = None
+            if package is not None:
+                # if we have a package, break it down if it's a rename
+                idx = package.find(":")
+                if idx != -1:
+                    package2 = package[idx + 1 :]
+                    package = package[0:idx]
+
+            if package == "":
+                package = None
+
+            if package2 == "":
+                package2 = None
+
+            return group, package, package2
 
         if not isinstance(defaults, ListConfig):
             raise ValueError(
@@ -283,7 +299,7 @@ class ConfigSource(Plugin):
                 if len(keys) == 0:
                     raise ValueError(f"Missing group name in {item}")
                 key = keys[0]
-                config_group, package = _split_group(key)
+                config_group, package, package2 = _split_group(key)
                 node = item._get_node(key)
                 assert node is not None
                 config_name = node._value()
@@ -292,6 +308,7 @@ class ConfigSource(Plugin):
                     config_group=config_group,
                     config_name=config_name,
                     package=package,
+                    package2=package2,
                     optional=optional,
                 )
             elif isinstance(item, str):

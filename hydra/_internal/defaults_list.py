@@ -59,6 +59,7 @@ def _compute_element_defaults_list_impl(
 
     defaults = loaded.defaults_list if loaded is not None else []
 
+    # check that self is present only once
     for d in defaults:
         if d.config_name == "_self_":
             if has_self is True:
@@ -110,6 +111,8 @@ def _expand_defaults_list_impl(
             else:
                 d.config_name = self_name
             added_sublist = [d]
+        elif d.is_package_rename():
+            added_sublist = [d]
         else:
             if d.fully_qualified_group_name() in group_to_choice:
                 d.config_name = group_to_choice[d.fully_qualified_group_name()]
@@ -123,13 +126,28 @@ def _expand_defaults_list_impl(
         ret.append(added_sublist)
 
         for dd in reversed(added_sublist):
-            if dd.config_group is not None:
+            if dd.config_group is not None and dd.config_name != "_keep_":
                 fqgn = dd.fully_qualified_group_name()
                 if fqgn not in group_to_choice:
                     group_to_choice[fqgn] = dd.config_name
 
     ret.reverse()
     ret = [item for sublist in ret for item in sublist]
+
+    # process package renames:
+    while True:
+        last_rename_index = -1
+        for idx, d in reversed(list(enumerate(ret))):
+            if d.is_package_rename():
+                last_rename_index = idx
+                break
+        if last_rename_index != -1:
+            rename = ret.pop(last_rename_index)
+            for d in ret:
+                if is_matching(rename, d):
+                    d.package = rename.get_subject_package()
+        else:
+            break
 
     deduped = []
     seen_groups = set()
@@ -166,3 +184,23 @@ def missing_config_error(
     raise MissingConfigException(
         missing_cfg_file=config_name, message=add_search_path()
     )
+
+
+def is_matching(rename: DefaultElement, other: DefaultElement) -> bool:
+    if rename.config_group != other.config_group:
+        return False
+    if rename.package == other.package:
+        return True
+    return False
+
+
+# def is_matching(override: Override, default: DefaultElement) -> bool:
+#     assert override.key_or_group == default.config_group
+#     if override.is_delete():
+#         return override.get_subject_package() == default.package
+#     else:
+#         return override.key_or_group == default.config_group and (
+#             override.pkg1 == default.package
+#             or override.pkg1 == ""
+#             and default.package is None
+#         )

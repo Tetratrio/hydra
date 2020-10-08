@@ -369,6 +369,7 @@ class ConfigLoaderImpl(ConfigLoader):
                 matches.append(default)
         return matches
 
+    # TODO: port to defaults_list.py (+ tests)
     @staticmethod
     def _apply_overrides_to_defaults(
         overrides: List[Override], defaults: List[DefaultElement]
