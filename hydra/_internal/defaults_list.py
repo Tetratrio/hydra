@@ -150,12 +150,14 @@ def _expand_defaults_list_impl(
     # list order is determined by first instance from that config group
     # selected config group is determined by the last override
 
-    ret = []
+    deferred_overrides = []
+
+    ret: List[DefaultElement] = []
     for d in reversed(defaults):
         if d.config_name == "_self_":
             if self_name is None:
                 raise ConfigCompositionException(
-                    "self_name is not specified adn defaults list contains a _self_ item"
+                    "self_name is not specified and defaults list contains a _self_ item"
                 )
             d = copy.deepcopy(d)
             # override self_name
@@ -165,13 +167,10 @@ def _expand_defaults_list_impl(
                 d.config_name = self_name
             added_sublist = [d]
         elif d.is_package_rename():
-            # TODO: can always defer if from overrides and be done with it?
-            added_sublist = [d]  # defer
-        elif d.is_add_only:
-            # TODO: what happens if this also needed to be expanded if it passes validation
-            added_sublist = [d]  # defer
+            added_sublist = [d]  # defer rename
         elif d.from_override:
-            added_sublist = [d]  # defer
+            added_sublist = [d]  # defer override processing
+            deferred_overrides.append(d)
         else:
             fqgn = d.fully_qualified_group_name()
             if fqgn in group_to_choice:
@@ -198,6 +197,16 @@ def _expand_defaults_list_impl(
 
     _process_renames(ret)
     _verify_no_add_conflicts(ret)
+
+    # expand deferred
+    for d in deferred_overrides:
+        item_defaults = _compute_element_defaults_list_impl(
+            element=d,
+            group_to_choice=group_to_choice,
+            repo=repo,
+        )
+        index = ret.index(d)
+        ret[index:index] = item_defaults
 
     deduped = []
     seen_groups = set()

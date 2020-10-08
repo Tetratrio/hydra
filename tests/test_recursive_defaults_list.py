@@ -375,12 +375,7 @@ def convert_overrides_to_defaults(
             ["+b=b1"],
             [
                 DefaultElement(config_name="no_defaults"),
-                DefaultElement(
-                    config_group="b",
-                    config_name="b1",
-                    is_add_only=True,
-                    from_override=True,
-                ),
+                DefaultElement(config_group="b", config_name="b1"),
             ],
             id="adding_item",
         ),
@@ -389,12 +384,7 @@ def convert_overrides_to_defaults(
             ["+b=b2"],
             [
                 DefaultElement(config_name="no_defaults"),
-                DefaultElement(
-                    config_group="b",
-                    config_name="b2",
-                    is_add_only=True,
-                    from_override=True,
-                ),
+                DefaultElement(config_group="b", config_name="b2"),
                 DefaultElement(config_group="c", config_name="c2"),
             ],
             id="adding_item_recursive",
@@ -411,8 +401,6 @@ def convert_overrides_to_defaults(
                     config_group="b",
                     package="pkg",
                     config_name="b1",
-                    is_add_only=True,
-                    from_override=True,
                 ),
             ],
             id="adding_item_at_package",
