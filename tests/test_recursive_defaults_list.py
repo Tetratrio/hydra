@@ -293,6 +293,11 @@ def convert_overrides_to_defaults(
 ) -> List[DefaultElement]:
     ret = []
     for override in parsed_overrides:
+        if override.is_add() and override.is_package_rename():
+            raise ConfigCompositionException(
+                "Add syntax does not support package rename, remove + prefix"
+            )
+
         value = override.value()
         assert isinstance(value, str)
         if override.is_package_rename():
@@ -397,28 +402,39 @@ def convert_overrides_to_defaults(
             ),
             id="adding_duplicate_item",
         ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["+db=mysql"],
-        #             pytest.raises(
-        #                 HydraException,
-        #                 match=re.escape(
-        #                     "Could not add 'db=mysql'. 'db' is already in the defaults list."
-        #                 ),
-        #             ),
-        #             id="adding_duplicate_item",
-        #         ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["+db@src:foo=mysql"],
-        #             pytest.raises(
-        #                 HydraException,
-        #                 match=re.escape(
-        #                     "Add syntax does not support package rename, remove + prefix"
-        #                 ),
-        #             ),
-        #             id="add_rename_error",
-        #         ),
+        pytest.param(
+            "test_overrides",
+            ["+a=a2"],
+            pytest.raises(
+                HydraException,
+                match=re.escape(
+                    "Could not add 'a=a2'. 'a' is already in the defaults list."
+                ),
+            ),
+            id="adding_duplicate_item",
+        ),
+        pytest.param(
+            "test_overrides",
+            ["a=a6", "+c=c2"],
+            pytest.raises(
+                HydraException,
+                match=re.escape(
+                    "Could not add 'c=c2'. 'c' is already in the defaults list."
+                ),
+            ),
+            id="adding_duplicate_item_recursive",
+        ),
+        pytest.param(
+            "test_overrides",
+            ["+a@pkg:pkg2=a1"],
+            pytest.raises(
+                HydraException,
+                match=re.escape(
+                    "Add syntax does not support package rename, remove + prefix"
+                ),
+            ),
+            id="add_rename_error",
+        ),
         #         pytest.param(
         #             defaults_list,
         #             ["+db@src=mysql"],
@@ -525,17 +541,21 @@ def test_apply_overrides_to_defaults(
     csp.append(provider="test", path="file://tests/test_data/recursive_defaults_lists")
     repo = ConfigRepository(config_search_path=csp)
 
-    parser = OverridesParser.create()
-    parsed_overrides = parser.parse_overrides(overrides=overrides)
-    overrides_as_defaults = convert_overrides_to_defaults(parsed_overrides)
-    defaults = [
-        DefaultElement(config_name=config_with_defaults),
-    ]
-    defaults.extend(overrides_as_defaults)
+    def create_defaults() -> Any:
+        parser = OverridesParser.create()
+        parsed_overrides = parser.parse_overrides(overrides=overrides)
+        overrides_as_defaults = convert_overrides_to_defaults(parsed_overrides)
+        defaults = [
+            DefaultElement(config_name=config_with_defaults),
+        ]
+        defaults.extend(overrides_as_defaults)
+        return defaults
 
     if isinstance(expected, list):
+        defaults = create_defaults()
         ret = expand_defaults_list(self_name=None, defaults=defaults, repo=repo)
         assert ret == expected
     else:
         with expected:
+            defaults = create_defaults()
             expand_defaults_list(self_name=None, defaults=defaults, repo=repo)
