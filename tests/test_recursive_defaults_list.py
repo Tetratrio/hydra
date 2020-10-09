@@ -227,10 +227,20 @@ Plugins.instance()
             ],
             id="delete_with_null",
         ),
-        # TODO:
-        #  delete with ~
-        #  ~a
-        #  ~a=a1
+        pytest.param(
+            DefaultElement(config_group="delete", config_name="d2"),
+            [
+                DefaultElement(config_group="delete", config_name="d2"),
+            ],
+            id="delete_with_tilda",
+        ),
+        pytest.param(
+            DefaultElement(config_group="delete", config_name="d3"),
+            [
+                DefaultElement(config_group="delete", config_name="d3"),
+            ],
+            id="delete_with_tilda_k=v",
+        ),
     ],
 )
 def test_compute_element_defaults_list(

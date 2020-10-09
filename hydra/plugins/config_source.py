@@ -320,7 +320,13 @@ class ConfigSource(Plugin):
                     is_delete=is_delete,
                 )
             elif isinstance(item, str):
-                default = DefaultElement(config_group=None, config_name=item)
+                if item.startswith("~"):
+                    item = item[1:]
+                    default = DefaultElement(
+                        config_group=item, config_name="_delete_", is_delete=True
+                    )
+                else:
+                    default = DefaultElement(config_group=None, config_name=item)
             else:
                 raise ValueError(
                     f"Unsupported type in defaults : {type(item).__name__}"
