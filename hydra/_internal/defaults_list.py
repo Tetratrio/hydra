@@ -100,7 +100,6 @@ def _find_match_before(
 
 
 def _verify_no_add_conflicts(defaults: List[DefaultElement]) -> None:
-
     for d in reversed(defaults):
         if d.from_override:
             fqgn = d.fully_qualified_group_name()
@@ -140,6 +139,10 @@ def _process_renames(defaults: List[DefaultElement]) -> None:
             break
 
 
+def _process_deletes(defaults: List[DefaultElement]) -> None:
+    pass
+
+
 def _expand_defaults_list_impl(
     self_name: Optional[str],
     defaults: List[DefaultElement],
@@ -162,7 +165,10 @@ def _expand_defaults_list_impl(
             d = copy.deepcopy(d)
             # override self_name
             if d.fully_qualified_group_name() in group_to_choice:
-                d.config_name = group_to_choice[d.fully_qualified_group_name()]
+                if d.is_delete:
+                    d.config_name = "_delete_"
+                else:
+                    d.config_name = group_to_choice[d.fully_qualified_group_name()]
             else:
                 d.config_name = self_name
             added_sublist = [d]
@@ -177,12 +183,15 @@ def _expand_defaults_list_impl(
                 new_config_name = group_to_choice[fqgn]
                 if new_config_name != d.config_name:
                     d.config_name = new_config_name
-            item_defaults = _compute_element_defaults_list_impl(
-                element=d,
-                group_to_choice=group_to_choice,
-                repo=repo,
-            )
-            added_sublist = item_defaults
+            if d.config_name != "_delete_":
+                item_defaults = _compute_element_defaults_list_impl(
+                    element=d,
+                    group_to_choice=group_to_choice,
+                    repo=repo,
+                )
+                added_sublist = item_defaults
+            else:
+                added_sublist = []
 
         ret.append(added_sublist)
 
@@ -207,6 +216,8 @@ def _expand_defaults_list_impl(
         )
         index = ret.index(d)
         ret[index:index] = item_defaults
+
+    _process_deletes(ret)
 
     deduped = []
     seen_groups = set()

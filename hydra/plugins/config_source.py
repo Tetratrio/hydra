@@ -304,12 +304,20 @@ class ConfigSource(Plugin):
                 assert node is not None
                 config_name = node._value()
 
+                is_delete = False
+                if config_name is None:
+                    is_delete = True
+                elif config_group.startswith("~"):
+                    is_delete = True
+                    config_group = config_group[1:]
+
                 default = DefaultElement(
                     config_group=config_group,
                     config_name=config_name,
                     package=package,
                     package2=package2,
                     optional=optional,
+                    is_delete=is_delete,
                 )
             elif isinstance(item, str):
                 default = DefaultElement(config_group=None, config_name=item)

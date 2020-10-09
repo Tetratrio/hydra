@@ -20,6 +20,8 @@ class DefaultElement:
     # set to True for external overrides with +
     is_add_only: bool = False
 
+    is_delete: bool = False
+
     def config_path(self) -> str:
         if self.config_group is not None:
             return f"{self.config_group}/{self.config_name}"
@@ -50,8 +52,12 @@ class DefaultElement:
                 ret = f"{self.config_group}@{package}={self.config_name}"
             else:
                 ret = f"{self.config_group}={self.config_name}"
+
         if self.is_add_only:
             ret = f"+{ret}"
+        elif self.is_delete:
+            ret = f"~{ret}"
+
         return ret
 
     def is_package_rename(self) -> bool:

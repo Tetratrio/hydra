@@ -176,6 +176,7 @@ Plugins.instance()
             ],
             id="b/base_from_b",
         ),
+        # rename
         pytest.param(
             DefaultElement(config_group="rename", config_name="r1"),
             [
@@ -217,6 +218,14 @@ Plugins.instance()
                 DefaultElement(config_group="a", config_name="a1"),
             ],
             id="rename_package_and_change_option",
+        ),
+        # delete
+        pytest.param(
+            DefaultElement(config_group="delete", config_name="d1"),
+            [
+                DefaultElement(config_group="delete", config_name="d1"),
+            ],
+            id="delete_with_null",
         ),
     ],
 )
