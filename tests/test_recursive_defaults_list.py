@@ -472,18 +472,29 @@ def convert_overrides_to_defaults(
             ),
             id="adding_without_plus",
         ),
-        #         # deleting item
-        #         pytest.param(
-        #             [],
-        #             ["~db=mysql"],
-        #             pytest.raises(
-        #                 HydraException,
-        #                 match=re.escape(
-        #                     "Could not delete. No match for 'db' in the defaults list."
-        #                 ),
-        #             ),
-        #             id="delete_no_match",
-        #         ),
+        # deleting item
+        pytest.param(
+            [],
+            ["~db=mysql"],
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Could not delete. No match for 'db' in the defaults list."
+                ),
+            ),
+            id="delete_no_match",
+        ),
+        pytest.param(
+            [],
+            ["~db"],
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Could not delete. No match for 'db' in the defaults list."
+                ),
+            ),
+            id="delete_no_match",
+        ),
         #         pytest.param(
         #             defaults_list,
         #             ["~db"],
