@@ -1,5 +1,6 @@
 import copy
-from typing import Dict, List, Optional
+from itertools import filterfalse
+from typing import Dict, List, Optional, Union
 
 from hydra._internal.config_repository import ConfigRepository
 from hydra.core import DefaultElement
@@ -25,9 +26,12 @@ def expand_defaults_list(
 ) -> List[DefaultElement]:
     group_to_choice = {}
     for d in reversed(defaults):
-        if d.config_group is not None:
-            if d.fully_qualified_group_name() not in group_to_choice:
-                group_to_choice[d.fully_qualified_group_name()] = d.config_name
+        if d.is_delete:
+            group_to_choice[d.fully_qualified_group_name()] = "_delete_"
+        else:
+            if d.config_group is not None:
+                if d.fully_qualified_group_name() not in group_to_choice:
+                    group_to_choice[d.fully_qualified_group_name()] = d.config_name
 
     return _expand_defaults_list_impl(
         self_name=self_name,
@@ -37,29 +41,9 @@ def expand_defaults_list(
     )
 
 
-def _compute_element_defaults_list_impl(
-    element: DefaultElement,
-    group_to_choice: Dict[str, str],
-    repo: ConfigRepository,
-) -> List[DefaultElement]:
-    # TODO: Should loaded configs be to cached in the repo to avoid loading more than once?
-    #  Ensure new approach does not cause the same config to be loaded more than once.
-    has_self = False
-
-    loaded = repo.load_config(
-        config_path=element.config_path(), is_primary_config=False
-    )
-    if loaded is None and not element.optional:
-        missing_config_error(
-            repo=repo,
-            config_name=element.config_path(),
-            msg=f"Cannot find config : {element.config_path()}, check that it's in your config search path",
-            with_search_path=True,
-        )
-
-    defaults = loaded.defaults_list if loaded is not None else []
-
+def _validate_self(element: DefaultElement, defaults: List[DefaultElement]) -> None:
     # check that self is present only once
+    has_self = False
     for d in defaults:
         if d.config_name == "_self_":
             if has_self is True:
@@ -78,6 +62,29 @@ def _compute_element_defaults_list_impl(
             package=element.package,
         )
         defaults.insert(0, me)
+
+
+def _compute_element_defaults_list_impl(
+    element: DefaultElement,
+    group_to_choice: Dict[str, str],
+    repo: ConfigRepository,
+) -> List[DefaultElement]:
+    # TODO: Should loaded configs be to cached in the repo to avoid loading more than once?
+    #  Ensure new approach does not cause the same config to be loaded more than once.
+
+    loaded = repo.load_config(
+        config_path=element.config_path(), is_primary_config=False
+    )
+    if loaded is None and not element.optional:
+        missing_config_error(
+            repo=repo,
+            config_name=element.config_path(),
+            msg=f"Cannot find config : {element.config_path()}, check that it's in your config search path",
+            with_search_path=True,
+        )
+
+    defaults = loaded.defaults_list if loaded is not None else []
+    _validate_self(element, defaults)
 
     return _expand_defaults_list_impl(
         self_name=element.config_name,
@@ -140,7 +147,7 @@ def _process_renames(defaults: List[DefaultElement]) -> None:
 
 
 def _process_deletes(defaults: List[DefaultElement]) -> None:
-    pass
+    defaults[:] = filterfalse(lambda d: d.is_delete, defaults)
 
 
 def _expand_defaults_list_impl(
@@ -155,7 +162,7 @@ def _expand_defaults_list_impl(
 
     deferred_overrides = []
 
-    ret: List[DefaultElement] = []
+    ret: List[Union[DefaultElement, List[DefaultElement]]] = []
     for d in reversed(defaults):
         if d.config_name == "_self_":
             if self_name is None:
@@ -174,6 +181,9 @@ def _expand_defaults_list_impl(
             added_sublist = [d]
         elif d.is_package_rename():
             added_sublist = [d]  # defer rename
+        elif d.is_delete:
+            group_to_choice[d.fully_qualified_group_name()] = "_delete_"
+            added_sublist = [d]  # defer delete
         elif d.from_override:
             added_sublist = [d]  # defer override processing
             deferred_overrides.append(d)
@@ -181,17 +191,19 @@ def _expand_defaults_list_impl(
             fqgn = d.fully_qualified_group_name()
             if fqgn in group_to_choice:
                 new_config_name = group_to_choice[fqgn]
-                if new_config_name != d.config_name:
-                    d.config_name = new_config_name
-            if d.config_name != "_delete_":
-                item_defaults = _compute_element_defaults_list_impl(
+            else:
+                new_config_name = d.config_name
+
+            if new_config_name == "_delete_":
+                d.is_delete = True
+                added_sublist = []
+            else:
+                d.config_name = new_config_name
+                added_sublist = _compute_element_defaults_list_impl(
                     element=d,
                     group_to_choice=group_to_choice,
                     repo=repo,
                 )
-                added_sublist = item_defaults
-            else:
-                added_sublist = []
 
         ret.append(added_sublist)
 
