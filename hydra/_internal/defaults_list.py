@@ -12,6 +12,12 @@ class DeleteKey:
     fqgn: str
     config_name: Optional[str]
 
+    def __repr__(self):
+        if self.config_name is None:
+            return self.fqgn
+        else:
+            return f"{self.fqgn}={self.config_name}"
+
 
 def compute_element_defaults_list(
     element: DefaultElement,
@@ -268,7 +274,7 @@ def _expand_defaults_list_impl(
     for g, c in delete_groups.items():
         if c == 0:
             raise ConfigCompositionException(
-                f"Could not delete. No match for '{g.fqgn}' in the defaults list."
+                f"Could not delete. No match for '{g}' in the defaults list."
             )
 
     deduped = []

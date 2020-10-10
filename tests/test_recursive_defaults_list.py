@@ -255,11 +255,21 @@ Plugins.instance()
             id="delete_no_match",
         ),
         pytest.param(
-            DefaultElement(config_group="delete", config_name="d4"),
+            DefaultElement(config_group="delete", config_name="d5"),
             pytest.raises(
                 ConfigCompositionException,
                 match=re.escape(
-                    "Could not delete. No match for 'z' in the defaults list."
+                    "Could not delete. No match for 'b=b2' in the defaults list."
+                ),
+            ),
+            id="delete_no_match",
+        ),
+        pytest.param(
+            DefaultElement(config_group="delete", config_name="d7"),
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Could not delete. No match for 'b@foo=b1' in the defaults list."
                 ),
             ),
             id="delete_no_match",
@@ -540,7 +550,7 @@ def convert_overrides_to_defaults(
             pytest.raises(
                 ConfigCompositionException,
                 match=re.escape(
-                    "Could not delete. No match for 'db' in the defaults list."
+                    "Could not delete. No match for 'db=mysql' in the defaults list."
                 ),
             ),
             id="delete_no_match",
@@ -552,6 +562,17 @@ def convert_overrides_to_defaults(
                 ConfigCompositionException,
                 match=re.escape(
                     "Could not delete. No match for 'db' in the defaults list."
+                ),
+            ),
+            id="delete_no_match",
+        ),
+        pytest.param(
+            "no_defaults",
+            ["~db=foo"],
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Could not delete. No match for 'db=foo' in the defaults list."
                 ),
             ),
             id="delete_no_match",
