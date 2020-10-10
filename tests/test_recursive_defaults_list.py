@@ -288,7 +288,7 @@ Plugins.instance()
 def test_compute_element_defaults_list(
     hydra_restore_singletons: Any,
     element: DefaultElement,
-    expected: List[DefaultElement],
+    expected: Any,
 ) -> None:
     csp = ConfigSearchPathImpl()
     csp.append(provider="test", path="file://tests/test_data/recursive_defaults_lists")
@@ -577,12 +577,22 @@ def convert_overrides_to_defaults(
             ),
             id="delete_no_match",
         ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["~db"],
-        #             [{"db@src": "mysql"}, {"hydra/launcher": "basic"}],
-        #             id="delete",
-        #         ),
+        pytest.param(
+            "test_overrides",
+            ["~a"],
+            [
+                DefaultElement(config_name="test_overrides"),
+                DefaultElement(config_group="a", config_name="a1", is_deleted=True),
+                DefaultElement(config_group="a", package="pkg", config_name="a1"),
+            ],
+            id="delete",
+        ),
+        # pytest.param(
+        #     defaults_list,
+        #     ["~db"],
+        #     [{"db@src": "mysql"}, {"hydra/launcher": "basic"}],
+        #     id="delete",
+        # ),
         #         pytest.param(
         #             defaults_list,
         #             ["~db=mysql"],
@@ -641,7 +651,7 @@ def convert_overrides_to_defaults(
 def test_apply_overrides_to_defaults(
     config_with_defaults: str,
     overrides: List[str],
-    expected: List[DefaultElement],
+    expected: Any,
 ) -> None:
     assert isinstance(config_with_defaults, str)
 

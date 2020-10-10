@@ -12,7 +12,7 @@ class DeleteKey:
     fqgn: str
     config_name: Optional[str]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if self.config_name is None:
             return self.fqgn
         else:
@@ -23,8 +23,8 @@ def compute_element_defaults_list(
     element: DefaultElement,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
-    group_to_choice = {}
-    delete_groups = {}
+    group_to_choice: Dict[str, str] = {}
+    delete_groups: Dict[DeleteKey, int] = {}
     return _compute_element_defaults_list_impl(
         element=element,
         group_to_choice=group_to_choice,
@@ -130,7 +130,7 @@ def _find_match_before(
 
 def _verify_no_add_conflicts(defaults: List[DefaultElement]) -> None:
     for d in reversed(defaults):
-        if d.from_override:
+        if d.from_override and not d.is_delete:
             fqgn = d.fully_qualified_group_name()
             match = _find_match_before(defaults, d)
             if d.is_add_only and match is not None:
@@ -220,10 +220,10 @@ def _expand_defaults_list_impl(
             delete_key = DeleteKey(
                 fqgn, d.config_name if d.config_name != "_delete_" else None
             )
+            # TODO: should I even populate delete_groups onside and pass it
             if delete_key not in delete_groups:
                 delete_groups[delete_key] = 0
-            added_sublist = []
-            # added_sublist = [d]  # defer delete
+            added_sublist = [d] if d.from_override else []
         elif d.from_override:
             added_sublist = [d]  # defer override processing
             deferred_overrides.append(d)
@@ -246,7 +246,11 @@ def _expand_defaults_list_impl(
                 )
 
         for dd in reversed(added_sublist):
-            if dd.config_group is not None and dd.config_name != "_keep_":
+            if (
+                dd.config_group is not None
+                and dd.config_name != "_keep_"
+                and not dd.is_delete
+            ):
                 fqgn = dd.fully_qualified_group_name()
                 if fqgn not in group_to_choice:
                     group_to_choice[fqgn] = dd.config_name
@@ -254,10 +258,10 @@ def _expand_defaults_list_impl(
         ret.append(added_sublist)
 
     ret.reverse()
-    ret = [item for sublist in ret for item in sublist]
+    result: List[DefaultElement] = [item for sublist in ret for item in sublist]  # type: ignore
 
-    _process_renames(ret)
-    _verify_no_add_conflicts(ret)
+    _process_renames(result)
+    _verify_no_add_conflicts(result)
 
     # expand deferred
     for d in deferred_overrides:
@@ -267,8 +271,8 @@ def _expand_defaults_list_impl(
             delete_groups=delete_groups,
             repo=repo,
         )
-        index = ret.index(d)
-        ret[index:index] = item_defaults
+        index = result.index(d)
+        result[index:index] = item_defaults
 
     # verify all deletions deleted something
     for g, c in delete_groups.items():
@@ -279,7 +283,7 @@ def _expand_defaults_list_impl(
 
     deduped = []
     seen_groups = set()
-    for d in ret:
+    for d in result:
         if d.config_group is not None:
             fqgn = d.fully_qualified_group_name()
             if fqgn not in seen_groups:
