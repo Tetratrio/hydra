@@ -224,6 +224,7 @@ Plugins.instance()
             DefaultElement(config_group="delete", config_name="d1"),
             [
                 DefaultElement(config_group="delete", config_name="d1"),
+                DefaultElement(config_group="b", config_name="b1", is_deleted=True),
             ],
             id="delete_with_null",
         ),
@@ -231,6 +232,7 @@ Plugins.instance()
             DefaultElement(config_group="delete", config_name="d2"),
             [
                 DefaultElement(config_group="delete", config_name="d2"),
+                DefaultElement(config_group="b", config_name="b1", is_deleted=True),
             ],
             id="delete_with_tilda",
         ),
@@ -238,8 +240,38 @@ Plugins.instance()
             DefaultElement(config_group="delete", config_name="d3"),
             [
                 DefaultElement(config_group="delete", config_name="d3"),
+                DefaultElement(config_group="b", config_name="b1", is_deleted=True),
             ],
             id="delete_with_tilda_k=v",
+        ),
+        pytest.param(
+            DefaultElement(config_group="delete", config_name="d4"),
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Could not delete. No match for 'z' in the defaults list."
+                ),
+            ),
+            id="delete_no_match",
+        ),
+        pytest.param(
+            DefaultElement(config_group="delete", config_name="d4"),
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Could not delete. No match for 'z' in the defaults list."
+                ),
+            ),
+            id="delete_no_match",
+        ),
+        pytest.param(
+            DefaultElement(config_group="delete", config_name="d6"),
+            [
+                DefaultElement(config_group="delete", config_name="d6"),
+                DefaultElement(config_group="b", config_name="b1", is_deleted=True),
+                DefaultElement(config_group="b", config_name="b3"),
+            ],
+            id="specific_delete",
         ),
     ],
 )
@@ -322,7 +354,9 @@ def convert_overrides_to_defaults(
             )
 
         value = override.value()
-        assert isinstance(value, str)
+        if override.is_delete() and value is None:
+            value = "_delete_"
+
         if override.is_package_rename():
             default = DefaultElement(
                 config_group=override.key_or_group,
@@ -338,6 +372,10 @@ def convert_overrides_to_defaults(
                 package=override.get_subject_package(),
                 from_override=True,
             )
+
+        if override.is_delete():
+            default.is_delete = True
+
         if override.is_add():
             default.is_add_only = True
         ret.append(default)
@@ -497,7 +535,7 @@ def convert_overrides_to_defaults(
         ),
         # deleting item
         pytest.param(
-            [],
+            "no_defaults",
             ["~db=mysql"],
             pytest.raises(
                 ConfigCompositionException,
@@ -508,7 +546,7 @@ def convert_overrides_to_defaults(
             id="delete_no_match",
         ),
         pytest.param(
-            [],
+            "no_defaults",
             ["~db"],
             pytest.raises(
                 ConfigCompositionException,
@@ -584,6 +622,7 @@ def test_apply_overrides_to_defaults(
     overrides: List[str],
     expected: List[DefaultElement],
 ) -> None:
+    assert isinstance(config_with_defaults, str)
 
     csp = ConfigSearchPathImpl()
     csp.append(provider="test", path="file://tests/test_data/recursive_defaults_lists")

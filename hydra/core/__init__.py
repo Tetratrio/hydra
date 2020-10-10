@@ -20,7 +20,10 @@ class DefaultElement:
     # set to True for external overrides with +
     is_add_only: bool = False
 
+    # is a delete indicator, used as input
     is_delete: bool = False
+    # is this default deleted? used as output
+    is_deleted: bool = False
 
     def config_path(self) -> str:
         if self.config_group is not None:
@@ -55,8 +58,10 @@ class DefaultElement:
 
         if self.is_add_only:
             ret = f"+{ret}"
-        elif self.is_delete:
+        if self.is_delete:
             ret = f"~{ret}"
+        if self.is_deleted:
+            ret = f"{ret} (DELETED)"
 
         return ret
 

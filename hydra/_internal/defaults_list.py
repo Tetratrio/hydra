@@ -1,5 +1,5 @@
 import copy
-from itertools import filterfalse
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 from hydra._internal.config_repository import ConfigRepository
@@ -7,14 +7,22 @@ from hydra.core import DefaultElement
 from hydra.errors import ConfigCompositionException, MissingConfigException
 
 
+@dataclass(frozen=True, eq=True)
+class DeleteKey:
+    fqgn: str
+    config_name: Optional[str]
+
+
 def compute_element_defaults_list(
     element: DefaultElement,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
     group_to_choice = {}
+    delete_groups = {}
     return _compute_element_defaults_list_impl(
         element=element,
         group_to_choice=group_to_choice,
+        delete_groups=delete_groups,
         repo=repo,
     )
 
@@ -25,9 +33,14 @@ def expand_defaults_list(
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
     group_to_choice = {}
+    delete_groups = {}
     for d in reversed(defaults):
         if d.is_delete:
-            group_to_choice[d.fully_qualified_group_name()] = "_delete_"
+            delete_key = DeleteKey(
+                d.fully_qualified_group_name(),
+                d.config_name if d.config_name != "_delete_" else None,
+            )
+            delete_groups[delete_key] = 0
         else:
             if d.config_group is not None:
                 if d.fully_qualified_group_name() not in group_to_choice:
@@ -37,6 +50,7 @@ def expand_defaults_list(
         self_name=self_name,
         defaults=defaults,
         group_to_choice=group_to_choice,
+        delete_groups=delete_groups,
         repo=repo,
     )
 
@@ -67,6 +81,7 @@ def _validate_self(element: DefaultElement, defaults: List[DefaultElement]) -> N
 def _compute_element_defaults_list_impl(
     element: DefaultElement,
     group_to_choice: Dict[str, str],
+    delete_groups: Dict[DeleteKey, int],
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
     # TODO: Should loaded configs be to cached in the repo to avoid loading more than once?
@@ -90,6 +105,7 @@ def _compute_element_defaults_list_impl(
         self_name=element.config_name,
         defaults=defaults,
         group_to_choice=group_to_choice,
+        delete_groups=delete_groups,
         repo=repo,
     )
 
@@ -146,14 +162,29 @@ def _process_renames(defaults: List[DefaultElement]) -> None:
             break
 
 
-def _process_deletes(defaults: List[DefaultElement]) -> None:
-    defaults[:] = filterfalse(lambda d: d.is_delete, defaults)
+def delete_if_matching(delete_groups: Dict[DeleteKey, int], d: DefaultElement) -> bool:
+    matched = False
+    for delete in delete_groups:
+        if delete.fqgn == d.fully_qualified_group_name():
+            if delete.config_name is None:
+                # fqdn only
+                matched = True
+                delete_groups[delete] += 1
+                d.is_deleted = True
+            else:
+                if delete.config_name == d.config_name:
+                    matched = True
+                    delete_groups[delete] += 1
+                    d.is_deleted = True
+
+    return matched
 
 
 def _expand_defaults_list_impl(
     self_name: Optional[str],
     defaults: List[DefaultElement],
     group_to_choice: Dict[str, str],
+    delete_groups: Dict[DeleteKey, int],
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
 
@@ -164,6 +195,7 @@ def _expand_defaults_list_impl(
 
     ret: List[Union[DefaultElement, List[DefaultElement]]] = []
     for d in reversed(defaults):
+        fqgn = d.fully_qualified_group_name()
         if d.config_name == "_self_":
             if self_name is None:
                 raise ConfigCompositionException(
@@ -171,19 +203,21 @@ def _expand_defaults_list_impl(
                 )
             d = copy.deepcopy(d)
             # override self_name
-            if d.fully_qualified_group_name() in group_to_choice:
-                if d.is_delete:
-                    d.config_name = "_delete_"
-                else:
-                    d.config_name = group_to_choice[d.fully_qualified_group_name()]
+            if fqgn in group_to_choice:
+                d.config_name = group_to_choice[fqgn]
             else:
                 d.config_name = self_name
             added_sublist = [d]
         elif d.is_package_rename():
             added_sublist = [d]  # defer rename
         elif d.is_delete:
-            group_to_choice[d.fully_qualified_group_name()] = "_delete_"
-            added_sublist = [d]  # defer delete
+            delete_key = DeleteKey(
+                fqgn, d.config_name if d.config_name != "_delete_" else None
+            )
+            if delete_key not in delete_groups:
+                delete_groups[delete_key] = 0
+            added_sublist = []
+            # added_sublist = [d]  # defer delete
         elif d.from_override:
             added_sublist = [d]  # defer override processing
             deferred_overrides.append(d)
@@ -194,24 +228,24 @@ def _expand_defaults_list_impl(
             else:
                 new_config_name = d.config_name
 
-            if new_config_name == "_delete_":
-                d.is_delete = True
-                added_sublist = []
+            if delete_if_matching(delete_groups, d):
+                added_sublist = [d]
             else:
                 d.config_name = new_config_name
                 added_sublist = _compute_element_defaults_list_impl(
                     element=d,
                     group_to_choice=group_to_choice,
+                    delete_groups={},
                     repo=repo,
                 )
-
-        ret.append(added_sublist)
 
         for dd in reversed(added_sublist):
             if dd.config_group is not None and dd.config_name != "_keep_":
                 fqgn = dd.fully_qualified_group_name()
                 if fqgn not in group_to_choice:
                     group_to_choice[fqgn] = dd.config_name
+
+        ret.append(added_sublist)
 
     ret.reverse()
     ret = [item for sublist in ret for item in sublist]
@@ -224,12 +258,18 @@ def _expand_defaults_list_impl(
         item_defaults = _compute_element_defaults_list_impl(
             element=d,
             group_to_choice=group_to_choice,
+            delete_groups=delete_groups,
             repo=repo,
         )
         index = ret.index(d)
         ret[index:index] = item_defaults
 
-    _process_deletes(ret)
+    # verify all deletions deleted something
+    for g, c in delete_groups.items():
+        if c == 0:
+            raise ConfigCompositionException(
+                f"Could not delete. No match for '{g.fqgn}' in the defaults list."
+            )
 
     deduped = []
     seen_groups = set()
@@ -237,7 +277,8 @@ def _expand_defaults_list_impl(
         if d.config_group is not None:
             fqgn = d.fully_qualified_group_name()
             if fqgn not in seen_groups:
-                seen_groups.add(fqgn)
+                if not d.is_deleted:
+                    seen_groups.add(fqgn)
                 deduped.append(d)
         else:
             deduped.append(d)
