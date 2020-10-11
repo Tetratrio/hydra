@@ -12,7 +12,7 @@ from hydra.core import DefaultElement
 from hydra.core.override_parser.overrides_parser import OverridesParser
 from hydra.core.override_parser.types import Override
 from hydra.core.plugins import Plugins
-from hydra.errors import ConfigCompositionException
+from hydra.errors import ConfigCompositionException, OverrideParseException
 from hydra.test_utils.test_utils import chdir_hydra_root
 
 chdir_hydra_root()
@@ -292,6 +292,7 @@ Plugins.instance()
             ],
             id="delete_from_included",
         ),
+        # TODO: interpolations
     ],
 )
 def test_compute_element_defaults_list(
@@ -603,65 +604,77 @@ def convert_overrides_to_defaults(
             ],
             id="delete",
         ),
-        # pytest.param(
-        #     defaults_list,
-        #     ["~db"],
-        #     [{"db@src": "mysql"}, {"hydra/launcher": "basic"}],
-        #     id="delete",
-        # ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["~db=mysql"],
-        #             [{"db@src": "mysql"}, {"hydra/launcher": "basic"}],
-        #             id="delete",
-        #         ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["~db=postgresql"],
-        #             pytest.raises(
-        #                 HydraException,
-        #                 match=re.escape(
-        #                     "Could not delete. No match for 'db=postgresql' in the defaults list."
-        #                 ),
-        #             ),
-        #             id="delete_mismatch_value",
-        #         ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["~db@src"],
-        #             [{"db": "mysql"}, {"hydra/launcher": "basic"}],
-        #             id="delete",
-        #         ),
-        #         # syntax error
-        #         pytest.param(
-        #             defaults_list,
-        #             ["db"],
-        #             pytest.raises(
-        #                 HydraException,
-        #                 match=re.escape(
-        #                     "Error parsing override 'db'\nmissing EQUAL at '<EOF>'"
-        #                 ),
-        #             ),
-        #             id="syntax_error",
-        #         ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["db=[a,b,c]"],
-        #             pytest.raises(
-        #                 HydraException,
-        #                 match=re.escape("Config group override value type cannot be a list"),
-        #             ),
-        #             id="syntax_error",
-        #         ),
-        #         pytest.param(
-        #             defaults_list,
-        #             ["db={a:1,b:2}"],
-        #             pytest.raises(
-        #                 HydraException,
-        #                 match=re.escape("Config group override value type cannot be a dict"),
-        #             ),
-        #             id="syntax_error",
-        #         ),
+        pytest.param(
+            "test_overrides",
+            ["~a=a1"],
+            [
+                DefaultElement(config_name="test_overrides"),
+                DefaultElement(config_group="a", config_name="a1", is_deleted=True),
+                DefaultElement(config_group="a", package="pkg", config_name="a1"),
+                DefaultElement(config_group="c", config_name="c1"),
+            ],
+            id="delete",
+        ),
+        pytest.param(
+            "test_overrides",
+            ["~a=zzz"],
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Could not delete. No match for 'a=zzz' in the defaults list."
+                ),
+            ),
+            id="delete",
+        ),
+        pytest.param(
+            "test_overrides",
+            ["~a@pkg"],
+            [
+                DefaultElement(config_name="test_overrides"),
+                DefaultElement(config_group="a", config_name="a1"),
+                DefaultElement(
+                    config_group="a", package="pkg", config_name="a1", is_deleted=True
+                ),
+                DefaultElement(config_group="c", config_name="c1"),
+            ],
+            id="delete",
+        ),
+        # syntax error
+        pytest.param(
+            "test_overrides",
+            ["db"],
+            pytest.raises(
+                OverrideParseException,
+                match=re.escape(
+                    "Error parsing override 'db'\nmissing EQUAL at '<EOF>'"
+                ),
+            ),
+            id="syntax_error",
+        ),
+        pytest.param(
+            "test_overrides",
+            ["db=[a,b,c]"],
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Defaults list supported delete syntax is in the form "
+                    "~group and ~group=value, where value is a group name (string)"
+                ),
+            ),
+            id="syntax_error",
+        ),
+        pytest.param(
+            "test_overrides",
+            ["db={a:1,b:2}"],
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Defaults list supported delete syntax is in the form "
+                    "~group and ~group=value, where value is a group name (string)"
+                ),
+            ),
+            id="syntax_error",
+        ),
     ],
 )
 def test_apply_overrides_to_defaults(
