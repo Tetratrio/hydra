@@ -265,6 +265,15 @@ Plugins.instance()
             id="delete_no_match",
         ),
         pytest.param(
+            DefaultElement(config_group="delete", config_name="d6"),
+            [
+                DefaultElement(config_group="delete", config_name="d6"),
+                DefaultElement(config_group="b", config_name="b1", is_deleted=True),
+                DefaultElement(config_group="b", config_name="b3"),
+            ],
+            id="specific_delete",
+        ),
+        pytest.param(
             DefaultElement(config_group="delete", config_name="d7"),
             pytest.raises(
                 ConfigCompositionException,
@@ -275,13 +284,13 @@ Plugins.instance()
             id="delete_no_match",
         ),
         pytest.param(
-            DefaultElement(config_group="delete", config_name="d6"),
+            DefaultElement(config_group="delete", config_name="d8"),
             [
-                DefaultElement(config_group="delete", config_name="d6"),
-                DefaultElement(config_group="b", config_name="b1", is_deleted=True),
-                DefaultElement(config_group="b", config_name="b3"),
+                DefaultElement(config_group="delete", config_name="d8"),
+                DefaultElement(config_group="b", config_name="b2"),
+                DefaultElement(config_group="c", config_name="c2", is_deleted=True),
             ],
-            id="specific_delete",
+            id="delete_from_included",
         ),
     ],
 )
@@ -366,6 +375,12 @@ def convert_overrides_to_defaults(
         value = override.value()
         if override.is_delete() and value is None:
             value = "_delete_"
+
+        if not isinstance(value, str):
+            raise ConfigCompositionException(
+                "Defaults list supported delete syntax is in the form"
+                " ~group and ~group=value, where value is a group name (string)"
+            )
 
         if override.is_package_rename():
             default = DefaultElement(
@@ -584,6 +599,7 @@ def convert_overrides_to_defaults(
                 DefaultElement(config_name="test_overrides"),
                 DefaultElement(config_group="a", config_name="a1", is_deleted=True),
                 DefaultElement(config_group="a", package="pkg", config_name="a1"),
+                DefaultElement(config_group="c", config_name="c1"),
             ],
             id="delete",
         ),

@@ -1,5 +1,6 @@
 import copy
 from dataclasses import dataclass
+from itertools import filterfalse
 from typing import Dict, List, Optional, Union
 
 from hydra._internal.config_repository import ConfigRepository
@@ -25,12 +26,30 @@ def compute_element_defaults_list(
 ) -> List[DefaultElement]:
     group_to_choice: Dict[str, str] = {}
     delete_groups: Dict[DeleteKey, int] = {}
-    return _compute_element_defaults_list_impl(
+    ret = _compute_element_defaults_list_impl(
         element=element,
         group_to_choice=group_to_choice,
         delete_groups=delete_groups,
         repo=repo,
     )
+
+    _post_process_deletes(ret, delete_groups)
+    return ret
+
+
+def _post_process_deletes(
+    ret: List[DefaultElement],
+    delete_groups: Dict[DeleteKey, int],
+) -> None:
+    # verify all deletions deleted something
+    for g, c in delete_groups.items():
+        if c == 0:
+            raise ConfigCompositionException(
+                f"Could not delete. No match for '{g}' in the defaults list."
+            )
+
+    # remove delete overrides
+    ret[:] = filterfalse(lambda x: x.is_delete, ret)
 
 
 def expand_defaults_list(
@@ -52,13 +71,17 @@ def expand_defaults_list(
                 if d.fully_qualified_group_name() not in group_to_choice:
                     group_to_choice[d.fully_qualified_group_name()] = d.config_name
 
-    return _expand_defaults_list_impl(
+    ret = _expand_defaults_list_impl(
         self_name=self_name,
         defaults=defaults,
         group_to_choice=group_to_choice,
         delete_groups=delete_groups,
         repo=repo,
     )
+
+    _post_process_deletes(ret, delete_groups)
+
+    return ret
 
 
 def _validate_self(element: DefaultElement, defaults: List[DefaultElement]) -> None:
@@ -223,7 +246,8 @@ def _expand_defaults_list_impl(
             # TODO: should I even populate delete_groups onside and pass it
             if delete_key not in delete_groups:
                 delete_groups[delete_key] = 0
-            added_sublist = [d] if d.from_override else []
+            # added_sublist = [d] if d.from_override else []
+            added_sublist = [d]
         elif d.from_override:
             added_sublist = [d]  # defer override processing
             deferred_overrides.append(d)
@@ -241,7 +265,7 @@ def _expand_defaults_list_impl(
                 added_sublist = _compute_element_defaults_list_impl(
                     element=d,
                     group_to_choice=group_to_choice,
-                    delete_groups={},
+                    delete_groups=delete_groups,
                     repo=repo,
                 )
 
@@ -273,13 +297,6 @@ def _expand_defaults_list_impl(
         )
         index = result.index(d)
         result[index:index] = item_defaults
-
-    # verify all deletions deleted something
-    for g, c in delete_groups.items():
-        if c == 0:
-            raise ConfigCompositionException(
-                f"Could not delete. No match for '{g}' in the defaults list."
-            )
 
     deduped = []
     seen_groups = set()
