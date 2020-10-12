@@ -292,7 +292,27 @@ Plugins.instance()
             ],
             id="delete_from_included",
         ),
-        # TODO: interpolations
+        # interpolation
+        pytest.param(
+            DefaultElement(config_group="interpolation", config_name="i1"),
+            [
+                DefaultElement(config_group="interpolation", config_name="i1"),
+                DefaultElement(config_group="a", config_name="a1"),
+                DefaultElement(config_group="b", config_name="b1"),
+                DefaultElement(config_group="a_b", config_name="a1_b1", optional=True),
+            ],
+            id="interpolation",
+        ),
+        pytest.param(
+            DefaultElement(config_group="interpolation", config_name="i2"),
+            [
+                DefaultElement(config_group="interpolation", config_name="i2"),
+                DefaultElement(config_group="a", config_name="a1"),
+                DefaultElement(config_group="b", config_name="b1"),
+                DefaultElement(config_group="a_b", config_name="a1_b1", optional=True),
+            ],
+            id="interpolation",
+        ),
     ],
 )
 def test_compute_element_defaults_list(
