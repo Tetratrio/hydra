@@ -7,10 +7,10 @@ from hydra._internal.config_search_path_impl import ConfigSearchPathImpl
 from hydra._internal.defaults_list import (
     expand_defaults_list,
     compute_element_defaults_list,
+    convert_overrides_to_defaults,
 )
 from hydra.core import DefaultElement
 from hydra.core.override_parser.overrides_parser import OverridesParser
-from hydra.core.override_parser.types import Override
 from hydra.core.plugins import Plugins
 from hydra.errors import ConfigCompositionException, OverrideParseException
 from hydra.test_utils.test_utils import chdir_hydra_root
@@ -382,51 +382,6 @@ def test_expand_defaults_list(
 
     ret = expand_defaults_list(self_name=None, defaults=input_defaults, repo=repo)
     assert ret == expected
-
-
-def convert_overrides_to_defaults(
-    parsed_overrides: List[Override],
-) -> List[DefaultElement]:
-    ret = []
-    for override in parsed_overrides:
-        if override.is_add() and override.is_package_rename():
-            raise ConfigCompositionException(
-                "Add syntax does not support package rename, remove + prefix"
-            )
-
-        value = override.value()
-        if override.is_delete() and value is None:
-            value = "_delete_"
-
-        if not isinstance(value, str):
-            raise ConfigCompositionException(
-                "Defaults list supported delete syntax is in the form"
-                " ~group and ~group=value, where value is a group name (string)"
-            )
-
-        if override.is_package_rename():
-            default = DefaultElement(
-                config_group=override.key_or_group,
-                config_name=value,
-                package=override.pkg1,
-                package2=override.pkg2,
-                from_override=True,
-            )
-        else:
-            default = DefaultElement(
-                config_group=override.key_or_group,
-                config_name=value,
-                package=override.get_subject_package(),
-                from_override=True,
-            )
-
-        if override.is_delete():
-            default.is_delete = True
-
-        if override.is_add():
-            default.is_add_only = True
-        ret.append(default)
-    return ret
 
 
 @pytest.mark.parametrize(  # type: ignore

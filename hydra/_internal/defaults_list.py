@@ -7,6 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from hydra._internal.config_repository import ConfigRepository
 from hydra.core import DefaultElement
+from hydra.core.override_parser.types import Override
 from hydra.errors import ConfigCompositionException, MissingConfigException
 
 
@@ -364,3 +365,48 @@ def is_matching(rename: DefaultElement, other: DefaultElement) -> bool:
     if rename.package == other.package:
         return True
     return False
+
+
+def convert_overrides_to_defaults(
+    parsed_overrides: List[Override],
+) -> List[DefaultElement]:
+    ret = []
+    for override in parsed_overrides:
+        if override.is_add() and override.is_package_rename():
+            raise ConfigCompositionException(
+                "Add syntax does not support package rename, remove + prefix"
+            )
+
+        value = override.value()
+        if override.is_delete() and value is None:
+            value = "_delete_"
+
+        if not isinstance(value, str):
+            raise ConfigCompositionException(
+                "Defaults list supported delete syntax is in the form"
+                " ~group and ~group=value, where value is a group name (string)"
+            )
+
+        if override.is_package_rename():
+            default = DefaultElement(
+                config_group=override.key_or_group,
+                config_name=value,
+                package=override.pkg1,
+                package2=override.pkg2,
+                from_override=True,
+            )
+        else:
+            default = DefaultElement(
+                config_group=override.key_or_group,
+                config_name=value,
+                package=override.get_subject_package(),
+                from_override=True,
+            )
+
+        if override.is_delete():
+            default.is_delete = True
+
+        if override.is_add():
+            default.is_add_only = True
+        ret.append(default)
+    return ret
