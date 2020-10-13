@@ -124,6 +124,10 @@ def _compute_element_defaults_list_impl(
     loaded = repo.load_config(
         config_path=element.config_path(), is_primary_config=False
     )
+    deleted = delete_if_matching(delete_groups, element)
+    if deleted:
+        return []
+
     if loaded is None and not element.optional:
         missing_config_error(
             repo=repo,
@@ -250,10 +254,8 @@ def _expand_defaults_list_impl(
                 d.config_name if d.config_name != "_delete_" else None,
                 must_delete=d.from_override,
             )
-            # TODO: should I even populate delete_groups outside and pass it
             if delete_key not in delete_groups:
                 delete_groups[delete_key] = 0
-            # added_sublist = [d] if d.from_override else []
             added_sublist = [d]
         elif d.from_override:
             added_sublist = [d]  # defer override processing

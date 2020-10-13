@@ -615,6 +615,23 @@ def test_expand_defaults_list(
             ],
             id="delete",
         ),
+        pytest.param(
+            "test_overrides",
+            ["a=foo", "~a"],
+            [
+                DefaultElement(config_name="test_overrides"),
+                DefaultElement(config_group="a", config_name="a1", is_deleted=True),
+                DefaultElement(config_group="a", package="pkg", config_name="a1"),
+                DefaultElement(config_group="c", config_name="c1"),
+                DefaultElement(
+                    config_group="a",
+                    config_name="foo",
+                    is_deleted=True,
+                    from_override=True,
+                ),
+            ],
+            id="delete_after_set_from_overrides",
+        ),
         # syntax error
         pytest.param(
             "test_overrides",

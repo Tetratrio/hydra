@@ -548,6 +548,8 @@ def test_merge_default_lists(
         ("config.yaml", ["~hydra/launcher"]),
         # remove from both
         ("removing-hydra-launcher-default.yaml", ["~hydra/launcher"]),
+        # TODO: in new defaults list, behavior is changing for this
+        #  and it should also delete the hydra/launcher=basic
         # second overrides removes
         ("config.yaml", ["hydra/launcher=submitit", "~hydra/launcher"]),
     ],
