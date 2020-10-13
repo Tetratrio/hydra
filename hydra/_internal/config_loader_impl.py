@@ -50,6 +50,12 @@ class IndexedDefaultElement:
         return f"#{self.idx} : {self.default}"
 
 
+@dataclass
+class SplitOverrides:
+    config_group_overrides: List[Override]
+    config_overrides: List[Override]
+
+
 class ConfigLoaderImpl(ConfigLoader):
     """
     Configuration loader
@@ -67,9 +73,51 @@ class ConfigLoaderImpl(ConfigLoader):
             config_search_path=config_search_path
         )
 
-    def split_by_override_type(
-        self, overrides: List[Override]
-    ) -> Tuple[List[Override], List[Override]]:
+    @staticmethod
+    def parse_overrides(
+        overrides: List[str],
+        run_mode: RunMode,
+        from_shell: bool,
+    ) -> List[Override]:
+        parser = OverridesParser.create()
+        parsed_overrides = parser.parse_overrides(overrides=overrides)
+        config_overrides = []
+        for x in parsed_overrides:
+            if x.is_sweep_override():
+                if run_mode == RunMode.MULTIRUN:
+                    if x.is_hydra_override():
+                        raise ConfigCompositionException(
+                            f"Sweeping over Hydra's configuration is not supported : '{x.input_line}'"
+                        )
+                    # do not process sweep overrides in multirun mode.
+                    # They will be handled directly by the sweeper
+                elif run_mode == RunMode.RUN:
+                    if x.value_type == ValueType.SIMPLE_CHOICE_SWEEP:
+                        vals = "value1,value2"
+                        if from_shell:
+                            example_override = f"key=\\'{vals}\\'"
+                        else:
+                            example_override = f"key='{vals}'"
+
+                        msg = dedent(
+                            f"""\
+                            Ambiguous value for argument '{x.input_line}'
+                            1. To use it as a list, use key=[value1,value2]
+                            2. To use it as string, quote the value: {example_override}
+                            3. To sweep over it, add --multirun to your command line"""
+                        )
+                        raise ConfigCompositionException(msg)
+                    else:
+                        raise ConfigCompositionException(
+                            f"Sweep parameters '{x.input_line}' requires --multirun"
+                        )
+                else:
+                    assert False
+            else:
+                config_overrides.append(x)
+        return config_overrides
+
+    def split_by_override_type(self, overrides: List[Override]) -> SplitOverrides:
         config_group_overrides = []
         config_overrides = []
         for override in overrides:
@@ -79,7 +127,10 @@ class ConfigLoaderImpl(ConfigLoader):
                 config_overrides.append(override)
             else:
                 config_group_overrides.append(override)
-        return config_group_overrides, config_overrides
+        return SplitOverrides(
+            config_group_overrides=config_group_overrides,
+            config_overrides=config_overrides,
+        )
 
     # TODO: del once new defaults processing is integrated
     def missing_config_error(
@@ -166,44 +217,13 @@ class ConfigLoaderImpl(ConfigLoader):
 
         parser = OverridesParser.create()
         parsed_overrides = parser.parse_overrides(overrides=overrides)
-        config_overrides = []
-        sweep_overrides = []
-        for x in parsed_overrides:
-            if x.is_sweep_override():
-                if run_mode == RunMode.MULTIRUN:
-                    if x.is_hydra_override():
-                        raise ConfigCompositionException(
-                            f"Sweeping over Hydra's configuration is not supported : '{x.input_line}'"
-                        )
-                    sweep_overrides.append(x)
-                elif run_mode == RunMode.RUN:
-                    if x.value_type == ValueType.SIMPLE_CHOICE_SWEEP:
-                        vals = "value1,value2"
-                        if from_shell:
-                            example_override = f"key=\\'{vals}\\'"
-                        else:
-                            example_override = f"key='{vals}'"
-
-                        msg = dedent(
-                            f"""\
-                            Ambiguous value for argument '{x.input_line}'
-                            1. To use it as a list, use key=[value1,value2]
-                            2. To use it as string, quote the value: {example_override}
-                            3. To sweep over it, add --multirun to your command line"""
-                        )
-                        raise ConfigCompositionException(msg)
-                    else:
-                        raise ConfigCompositionException(
-                            f"Sweep parameters '{x.input_line}' requires --multirun"
-                        )
-                else:
-                    assert False
-            else:
-                config_overrides.append(x)
-
-        config_group_overrides, config_overrides = self.split_by_override_type(
-            config_overrides
+        config_overrides = ConfigLoaderImpl.parse_overrides(
+            overrides=overrides, run_mode=run_mode, from_shell=from_shell
         )
+
+        split_res = self.split_by_override_type(config_overrides)
+        config_group_overrides = split_res.config_group_overrides
+        config_overrides = split_res.config_overrides
 
         # Load hydra config
         hydra_cfg_ret, _trace = self._load_primary_config(cfg_filename="hydra_config")
@@ -291,21 +311,21 @@ class ConfigLoaderImpl(ConfigLoader):
             for key in cfg.hydra.job.env_copy:
                 cfg.hydra.job.env_set[key] = os.environ[key]
 
-        # TODO: integrate new defaults logic
-        input_defaults = [DefaultElement(config_name="hydra_config")]
-
-        if config_name is not None:
-            input_defaults.append(DefaultElement(config_name=config_name, primary=True))
-
-        for default in convert_overrides_to_defaults(config_group_overrides):
-            input_defaults.append(default)
-
-        new_defaults = expand_defaults_list(
-            self_name=None,
-            defaults=input_defaults,
-            repo=self.repository,
-        )
-        # new defaults logic end
+        # # TODO: integrate new defaults logic
+        # input_defaults = [DefaultElement(config_name="hydra_config")]
+        #
+        # if config_name is not None:
+        #     input_defaults.append(DefaultElement(config_name=config_name, primary=True))
+        #
+        # for default in convert_overrides_to_defaults(config_group_overrides):
+        #     input_defaults.append(default)
+        #
+        # new_defaults = expand_defaults_list(
+        #     self_name=None,
+        #     defaults=input_defaults,
+        #     repo=self.repository,
+        # )
+        # # new defaults logic end
 
         return cfg
 
