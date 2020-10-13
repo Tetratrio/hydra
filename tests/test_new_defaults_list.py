@@ -246,23 +246,27 @@ Plugins.instance()
         ),
         pytest.param(
             DefaultElement(config_group="delete", config_name="d4"),
-            pytest.raises(
-                ConfigCompositionException,
-                match=re.escape(
-                    "Could not delete. No match for 'z' in the defaults list."
-                ),
-            ),
-            id="delete_no_match",
+            [
+                DefaultElement(config_group="delete", config_name="d4"),
+                DefaultElement(config_group="b", config_name="b1"),
+            ],
+            id="file_delete_not_mandatory",
         ),
         pytest.param(
             DefaultElement(config_group="delete", config_name="d5"),
-            pytest.raises(
-                ConfigCompositionException,
-                match=re.escape(
-                    "Could not delete. No match for 'b=b2' in the defaults list."
-                ),
-            ),
-            id="delete_no_match",
+            [
+                DefaultElement(config_group="delete", config_name="d5"),
+                DefaultElement(config_group="b", config_name="b1"),
+            ],
+            id="file_delete_not_mandatory",
+        ),
+        pytest.param(
+            DefaultElement(config_group="delete", config_name="d7"),
+            [
+                DefaultElement(config_group="delete", config_name="d7"),
+                DefaultElement(config_group="b", config_name="b1"),
+            ],
+            id="file_delete_not_mandatory",
         ),
         pytest.param(
             DefaultElement(config_group="delete", config_name="d6"),
@@ -274,16 +278,6 @@ Plugins.instance()
             id="specific_delete",
         ),
         pytest.param(
-            DefaultElement(config_group="delete", config_name="d7"),
-            pytest.raises(
-                ConfigCompositionException,
-                match=re.escape(
-                    "Could not delete. No match for 'b@foo=b1' in the defaults list."
-                ),
-            ),
-            id="delete_no_match",
-        ),
-        pytest.param(
             DefaultElement(config_group="delete", config_name="d8"),
             [
                 DefaultElement(config_group="delete", config_name="d8"),
@@ -291,6 +285,13 @@ Plugins.instance()
                 DefaultElement(config_group="c", config_name="c2", is_deleted=True),
             ],
             id="delete_from_included",
+        ),
+        pytest.param(
+            DefaultElement(config_group="delete", config_name="d9"),
+            [
+                DefaultElement(config_group="delete", config_name="d9"),
+            ],
+            id="file_delete_not_mandatory",
         ),
         # interpolation
         pytest.param(

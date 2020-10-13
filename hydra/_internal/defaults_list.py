@@ -14,6 +14,7 @@ from hydra.errors import ConfigCompositionException, MissingConfigException
 class DeleteKey:
     fqgn: str
     config_name: Optional[str]
+    must_delete: bool
 
     def __repr__(self) -> str:
         if self.config_name is None:
@@ -45,7 +46,7 @@ def _post_process_deletes(
 ) -> None:
     # verify all deletions deleted something
     for g, c in delete_groups.items():
-        if c == 0:
+        if c == 0 and g.must_delete:
             raise ConfigCompositionException(
                 f"Could not delete. No match for '{g}' in the defaults list."
             )
@@ -66,6 +67,7 @@ def expand_defaults_list(
             delete_key = DeleteKey(
                 d.fully_qualified_group_name(),
                 d.config_name if d.config_name != "_delete_" else None,
+                must_delete=d.from_override,
             )
             delete_groups[delete_key] = 0
         else:
@@ -243,9 +245,11 @@ def _expand_defaults_list_impl(
             added_sublist = [d]  # defer rename
         elif d.is_delete:
             delete_key = DeleteKey(
-                fqgn, d.config_name if d.config_name != "_delete_" else None
+                fqgn,
+                d.config_name if d.config_name != "_delete_" else None,
+                must_delete=d.from_override,
             )
-            # TODO: should I even populate delete_groups onside and pass it
+            # TODO: should I even populate delete_groups outside and pass it
             if delete_key not in delete_groups:
                 delete_groups[delete_key] = 0
             # added_sublist = [d] if d.from_override else []

@@ -28,6 +28,7 @@ class DefaultElement:
     is_deleted: bool = False
 
     def config_path(self) -> str:
+        assert self.config_name is not None
         if self.config_group is not None:
             return f"{self.config_group}/{self.config_name}"
         else:
@@ -75,7 +76,7 @@ class DefaultElement:
     def get_subject_package(self) -> Optional[str]:
         return self.package if self.package2 is None else self.package2
 
-    def is_interpolation(self):
+    def is_interpolation(self) -> bool:
         """
         True if config_name is an interpolation
         """
@@ -85,7 +86,8 @@ class DefaultElement:
         else:
             return False
 
-    def resolve_interpolation(self, group_to_choice: DictConfig):
+    def resolve_interpolation(self, group_to_choice: DictConfig) -> None:
+        assert self.config_group is not None
         node = OmegaConf.create({self.config_group: self.config_name})
         node._set_parent(group_to_choice)
         self.config_name = node[self.config_group]
