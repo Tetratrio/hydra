@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from itertools import filterfalse
 from typing import Dict, List, Optional, Union
 
+from omegaconf import DictConfig, OmegaConf
+
 from hydra._internal.config_repository import ConfigRepository
 from hydra.core import DefaultElement
 from hydra.errors import ConfigCompositionException, MissingConfigException
@@ -24,7 +26,7 @@ def compute_element_defaults_list(
     element: DefaultElement,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
-    group_to_choice: Dict[str, str] = {}
+    group_to_choice = OmegaConf.create({})
     delete_groups: Dict[DeleteKey, int] = {}
     ret = _compute_element_defaults_list_impl(
         element=element,
@@ -57,7 +59,7 @@ def expand_defaults_list(
     defaults: List[DefaultElement],
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
-    group_to_choice = {}
+    group_to_choice = OmegaConf.create({})
     delete_groups = {}
     for d in reversed(defaults):
         if d.is_delete:
@@ -109,7 +111,7 @@ def _validate_self(element: DefaultElement, defaults: List[DefaultElement]) -> N
 
 def _compute_element_defaults_list_impl(
     element: DefaultElement,
-    group_to_choice: Dict[str, str],
+    group_to_choice: DictConfig,
     delete_groups: Dict[DeleteKey, int],
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
@@ -212,7 +214,7 @@ def delete_if_matching(delete_groups: Dict[DeleteKey, int], d: DefaultElement) -
 def _expand_defaults_list_impl(
     self_name: Optional[str],
     defaults: List[DefaultElement],
-    group_to_choice: Dict[str, str],
+    group_to_choice: DictConfig,
     delete_groups: Dict[DeleteKey, int],
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
@@ -251,6 +253,9 @@ def _expand_defaults_list_impl(
         elif d.from_override:
             added_sublist = [d]  # defer override processing
             deferred_overrides.append(d)
+        elif d.is_interpolation():
+            deferred_overrides.append(d)
+            added_sublist = [d]  # defer interpolation
         else:
             fqgn = d.fully_qualified_group_name()
             if fqgn in group_to_choice:
@@ -276,7 +281,7 @@ def _expand_defaults_list_impl(
                 and not dd.is_delete
             ):
                 fqgn = dd.fully_qualified_group_name()
-                if fqgn not in group_to_choice:
+                if fqgn not in group_to_choice and not d.is_interpolation():
                     group_to_choice[fqgn] = dd.config_name
 
         ret.append(added_sublist)
@@ -287,8 +292,21 @@ def _expand_defaults_list_impl(
     _process_renames(result)
     _verify_no_add_conflicts(result)
 
+    # prepare a local group_to_choice with the defaults to support
+    # legacy interpolations like ${defaults.1.a}
+    group_to_choice2 = copy.deepcopy(group_to_choice)
+    group_to_choice2.defaults = []
+    for d in defaults:
+        if d.config_group is not None:
+            group_to_choice2.defaults.append({d.config_group: d.config_name})
+        else:
+            group_to_choice2.defaults.append(d.config_name)
+
     # expand deferred
     for d in deferred_overrides:
+        if d.is_interpolation():
+            d.resolve_interpolation(group_to_choice2)
+
         item_defaults = _compute_element_defaults_list_impl(
             element=d,
             group_to_choice=group_to_choice,
@@ -342,15 +360,3 @@ def is_matching(rename: DefaultElement, other: DefaultElement) -> bool:
     if rename.package == other.package:
         return True
     return False
-
-
-# def is_matching(override: Override, default: DefaultElement) -> bool:
-#     assert override.key_or_group == default.config_group
-#     if override.is_delete():
-#         return override.get_subject_package() == default.package
-#     else:
-#         return override.key_or_group == default.config_group and (
-#             override.pkg1 == default.package
-#             or override.pkg1 == ""
-#             and default.package is None
-#         )

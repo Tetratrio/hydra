@@ -3,5 +3,4 @@ defaults:
   - _self_
   - a: a1
   - b: b1
-  - c: ${a}_${b}
-    optional: true
+  - a_b: ${a}_${b}

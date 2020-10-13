@@ -2,10 +2,12 @@
 from dataclasses import dataclass
 from typing import Optional
 
+from omegaconf import AnyNode, DictConfig, OmegaConf
+
 
 @dataclass
 class DefaultElement:
-    config_name: str
+    config_name: Optional[str]
     config_group: Optional[str] = None
     optional: bool = False
     package: Optional[str] = None
@@ -63,6 +65,8 @@ class DefaultElement:
         if self.is_deleted:
             ret = f"{ret} (DELETED)"
 
+        if self.optional:
+            ret = f"{ret} (optional)"
         return ret
 
     def is_package_rename(self) -> bool:
@@ -70,3 +74,18 @@ class DefaultElement:
 
     def get_subject_package(self) -> Optional[str]:
         return self.package if self.package2 is None else self.package2
+
+    def is_interpolation(self):
+        """
+        True if config_name is an interpolation
+        """
+        if isinstance(self.config_name, str):
+            node = AnyNode(self.config_name)
+            return node._is_interpolation()
+        else:
+            return False
+
+    def resolve_interpolation(self, group_to_choice: DictConfig):
+        node = OmegaConf.create({self.config_group: self.config_name})
+        node._set_parent(group_to_choice)
+        self.config_name = node[self.config_group]
