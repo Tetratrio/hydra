@@ -24,6 +24,12 @@ class DeleteKey:
             return f"{self.fqgn}={self.config_name}"
 
 
+@dataclass
+class DefaultsList:
+    original: List[DefaultElement]
+    effective: List[DefaultElement]
+
+
 def compute_element_defaults_list(
     element: DefaultElement,
     repo: ConfigRepository,
@@ -76,9 +82,10 @@ def expand_defaults_list(
                 if d.fully_qualified_group_name() not in group_to_choice:
                     group_to_choice[d.fully_qualified_group_name()] = d.config_name
 
+    dl = DefaultsList(original=copy.deepcopy(defaults), effective=defaults)
     ret = _expand_defaults_list_impl(
         self_name=self_name,
-        defaults=defaults,
+        defaults_list=dl,
         group_to_choice=group_to_choice,
         delete_groups=delete_groups,
         repo=repo,
@@ -89,10 +96,10 @@ def expand_defaults_list(
     return ret
 
 
-def _validate_self(element: DefaultElement, defaults: List[DefaultElement]) -> None:
+def _validate_self(element: DefaultElement, defaults: DefaultsList) -> None:
     # check that self is present only once
     has_self = False
-    for d in defaults:
+    for d in defaults.effective:
         if d.config_name == "_self_":
             if has_self is True:
                 raise ConfigCompositionException(
@@ -109,7 +116,7 @@ def _validate_self(element: DefaultElement, defaults: List[DefaultElement]) -> N
             config_name="_self_",
             package=element.package,
         )
-        defaults.insert(0, me)
+        defaults.effective.insert(0, me)
 
 
 def _compute_element_defaults_list_impl(
@@ -121,12 +128,14 @@ def _compute_element_defaults_list_impl(
     # TODO: Should loaded configs be to cached in the repo to avoid loading more than once?
     #  Ensure new approach does not cause the same config to be loaded more than once.
 
-    loaded = repo.load_config(
-        config_path=element.config_path(), is_primary_config=False
-    )
     deleted = delete_if_matching(delete_groups, element)
     if deleted:
         return []
+
+    loaded = repo.load_config(
+        config_path=element.config_path(),
+        is_primary_config=element.primary,
+    )
 
     if loaded is None and not element.optional:
         missing_config_error(
@@ -136,12 +145,19 @@ def _compute_element_defaults_list_impl(
             with_search_path=True,
         )
 
-    defaults = loaded.defaults_list if loaded is not None else []
+    if loaded is not None:
+        original = copy.deepcopy(loaded.defaults_list)
+        effective = loaded.defaults_list
+    else:
+        original = []
+        effective = []
+
+    defaults = DefaultsList(original=original, effective=effective)
     _validate_self(element, defaults)
 
     return _expand_defaults_list_impl(
         self_name=element.config_name,
-        defaults=defaults,
+        defaults_list=defaults,
         group_to_choice=group_to_choice,
         delete_groups=delete_groups,
         repo=repo,
@@ -220,7 +236,7 @@ def delete_if_matching(delete_groups: Dict[DeleteKey, int], d: DefaultElement) -
 
 def _expand_defaults_list_impl(
     self_name: Optional[str],
-    defaults: List[DefaultElement],
+    defaults_list: DefaultsList,
     group_to_choice: DictConfig,
     delete_groups: Dict[DeleteKey, int],
     repo: ConfigRepository,
@@ -230,6 +246,7 @@ def _expand_defaults_list_impl(
     # selected config group is determined by the last override
 
     deferred_overrides = []
+    defaults = defaults_list.effective
 
     ret: List[Union[DefaultElement, List[DefaultElement]]] = []
     for d in reversed(defaults):
@@ -303,7 +320,7 @@ def _expand_defaults_list_impl(
     # legacy interpolations like ${defaults.1.a}
     group_to_choice2 = copy.deepcopy(group_to_choice)
     group_to_choice2.defaults = []
-    for d in defaults:
+    for d in defaults_list.original:
         if d.config_group is not None:
             group_to_choice2.defaults.append({d.config_group: d.config_name})
         else:

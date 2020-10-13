@@ -305,9 +305,27 @@ Plugins.instance()
             id="interpolation",
         ),
         pytest.param(
-            DefaultElement(config_group="interpolation", config_name="i2"),
+            DefaultElement(
+                config_group="interpolation", config_name="i2_legacy_with_self"
+            ),
             [
-                DefaultElement(config_group="interpolation", config_name="i2"),
+                DefaultElement(
+                    config_group="interpolation", config_name="i2_legacy_with_self"
+                ),
+                DefaultElement(config_group="a", config_name="a1"),
+                DefaultElement(config_group="b", config_name="b1"),
+                DefaultElement(config_group="a_b", config_name="a1_b1"),
+            ],
+            id="interpolation",
+        ),
+        pytest.param(
+            DefaultElement(
+                config_group="interpolation", config_name="i3_legacy_without_self"
+            ),
+            [
+                DefaultElement(
+                    config_group="interpolation", config_name="i3_legacy_without_self"
+                ),
                 DefaultElement(config_group="a", config_name="a1"),
                 DefaultElement(config_group="b", config_name="b1"),
                 DefaultElement(config_group="a_b", config_name="a1_b1"),
@@ -322,7 +340,7 @@ def test_compute_element_defaults_list(
     expected: Any,
 ) -> None:
     csp = ConfigSearchPathImpl()
-    csp.append(provider="test", path="file://tests/test_data/recursive_defaults_lists")
+    csp.append(provider="test", path="file://tests/test_data/new_defaults_lists")
     repo = ConfigRepository(config_search_path=csp)
 
     if isinstance(expected, list):
@@ -377,7 +395,7 @@ def test_expand_defaults_list(
     expected: List[DefaultElement],
 ) -> None:
     csp = ConfigSearchPathImpl()
-    csp.append(provider="test", path="file://tests/test_data/recursive_defaults_lists")
+    csp.append(provider="test", path="file://tests/test_data/new_defaults_lists")
     repo = ConfigRepository(config_search_path=csp)
 
     ret = expand_defaults_list(self_name=None, defaults=input_defaults, repo=repo)
@@ -678,7 +696,7 @@ def test_apply_overrides_to_defaults(
     assert isinstance(config_with_defaults, str)
 
     csp = ConfigSearchPathImpl()
-    csp.append(provider="test", path="file://tests/test_data/recursive_defaults_lists")
+    csp.append(provider="test", path="file://tests/test_data/new_defaults_lists")
     repo = ConfigRepository(config_search_path=csp)
 
     def create_defaults() -> Any:

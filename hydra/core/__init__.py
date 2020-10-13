@@ -27,6 +27,9 @@ class DefaultElement:
     # is this default deleted? used as output
     is_deleted: bool = False
 
+    # True for the primary config (the one in compose() or @hydra.main())
+    primary: bool = False
+
     def config_path(self) -> str:
         assert self.config_name is not None
         if self.config_group is not None:
@@ -63,12 +66,29 @@ class DefaultElement:
             ret = f"+{ret}"
         if self.is_delete:
             ret = f"~{ret}"
+
+        flags = []
+        if not self.primary:
+            flags.append("primary")
         if self.is_deleted:
-            ret = f"{ret} (DELETED)"
+            flags.append("deleted")
+
+        if self.is_delete:
+            flags.append("delete")
 
         if self.optional:
-            ret = f"{ret} (optional)"
-        return ret
+            flags.append("optional")
+
+        if not self.from_override:
+            flags.append("from_override")
+
+        if not self.is_add_only:
+            flags.append("is_add_only")
+
+        if len(flags) > 0:
+            return f"{ret} ({','.join(flags)})"
+        else:
+            return ret
 
     def is_package_rename(self) -> bool:
         return self.package2 is not None

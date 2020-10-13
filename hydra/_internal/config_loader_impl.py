@@ -242,22 +242,6 @@ class ConfigLoaderImpl(ConfigLoader):
 
         self._combine_default_lists(defaults, job_defaults)
 
-        # TODO: integrate new defaults logic
-        input_defaults = [DefaultElement(config_name="hydra_config")]
-
-        if config_name is not None:
-            input_defaults.append(DefaultElement(config_name=config_name))
-
-        for default in convert_overrides_to_defaults(config_group_overrides):
-            input_defaults.append(default)
-
-        new_defaults = expand_defaults_list(
-            self_name=None,
-            defaults=input_defaults,
-            repo=self.repository,
-        )
-        # new defaults logic end
-
         ConfigLoaderImpl._apply_overrides_to_defaults(config_group_overrides, defaults)
 
         # Load and defaults and merge them into cfg
@@ -306,6 +290,22 @@ class ConfigLoaderImpl(ConfigLoader):
 
             for key in cfg.hydra.job.env_copy:
                 cfg.hydra.job.env_set[key] = os.environ[key]
+
+        # TODO: integrate new defaults logic
+        input_defaults = [DefaultElement(config_name="hydra_config")]
+
+        if config_name is not None:
+            input_defaults.append(DefaultElement(config_name=config_name, primary=True))
+
+        for default in convert_overrides_to_defaults(config_group_overrides):
+            input_defaults.append(default)
+
+        new_defaults = expand_defaults_list(
+            self_name=None,
+            defaults=input_defaults,
+            repo=self.repository,
+        )
+        # new defaults logic end
 
         return cfg
 

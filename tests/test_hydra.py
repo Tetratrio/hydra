@@ -941,7 +941,11 @@ def test_multirun_structured_conflict(
 )
 class TestVariousRuns:
     @pytest.mark.parametrize(  # type: ignore
-        "sweep", [pytest.param(False, id="run"), pytest.param(True, id="sweep")]
+        "sweep",
+        [
+            pytest.param(False, id="run"),
+            pytest.param(True, id="sweep"),
+        ],
     )
     def test_run_with_missing_default(
         self, cmd_base: List[str], tmpdir: Any, sweep: bool
