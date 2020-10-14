@@ -286,17 +286,12 @@ def _expand_defaults_list_impl(
             deferred_overrides.append(d)
             added_sublist = [d]  # defer interpolation
         else:
-            fqgn = d.fully_qualified_group_name()
-            if fqgn in group_to_choice:
-                # TODO: just set d.config_name directly here?
-                new_config_name = group_to_choice[fqgn]
-            else:
-                new_config_name = d.config_name
-
             if delete_if_matching(delete_groups, d):
                 added_sublist = [d]
             else:
-                d.config_name = new_config_name
+                if fqgn in group_to_choice:
+                    d.config_name = group_to_choice[fqgn]
+
                 added_sublist = _compute_element_defaults_list_impl(
                     element=d,
                     group_to_choice=group_to_choice,
