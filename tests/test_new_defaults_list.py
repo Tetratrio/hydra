@@ -224,7 +224,13 @@ Plugins.instance()
             DefaultElement(config_group="delete", config_name="d1"),
             [
                 DefaultElement(config_group="delete", config_name="d1"),
-                DefaultElement(config_group="b", config_name="b1", is_deleted=True),
+                DefaultElement(
+                    config_group="b",
+                    config_name="b1",
+                    is_deleted=True,
+                    skip_load=True,
+                    skip_load_reason="deleted_from_list",
+                ),
             ],
             id="delete_with_null",
         ),
@@ -232,7 +238,13 @@ Plugins.instance()
             DefaultElement(config_group="delete", config_name="d2"),
             [
                 DefaultElement(config_group="delete", config_name="d2"),
-                DefaultElement(config_group="b", config_name="b1", is_deleted=True),
+                DefaultElement(
+                    config_group="b",
+                    config_name="b1",
+                    is_deleted=True,
+                    skip_load=True,
+                    skip_load_reason="deleted_from_list",
+                ),
             ],
             id="delete_with_tilda",
         ),
@@ -240,7 +252,13 @@ Plugins.instance()
             DefaultElement(config_group="delete", config_name="d3"),
             [
                 DefaultElement(config_group="delete", config_name="d3"),
-                DefaultElement(config_group="b", config_name="b1", is_deleted=True),
+                DefaultElement(
+                    config_group="b",
+                    config_name="b1",
+                    is_deleted=True,
+                    skip_load=True,
+                    skip_load_reason="deleted_from_list",
+                ),
             ],
             id="delete_with_tilda_k=v",
         ),
@@ -272,7 +290,13 @@ Plugins.instance()
             DefaultElement(config_group="delete", config_name="d6"),
             [
                 DefaultElement(config_group="delete", config_name="d6"),
-                DefaultElement(config_group="b", config_name="b1", is_deleted=True),
+                DefaultElement(
+                    config_group="b",
+                    config_name="b1",
+                    is_deleted=True,
+                    skip_load=True,
+                    skip_load_reason="deleted_from_list",
+                ),
                 DefaultElement(config_group="b", config_name="b3"),
             ],
             id="specific_delete",
@@ -282,7 +306,13 @@ Plugins.instance()
             [
                 DefaultElement(config_group="delete", config_name="d8"),
                 DefaultElement(config_group="b", config_name="b2"),
-                DefaultElement(config_group="c", config_name="c2", is_deleted=True),
+                DefaultElement(
+                    config_group="c",
+                    config_name="c2",
+                    is_deleted=True,
+                    skip_load=True,
+                    skip_load_reason="deleted_from_list",
+                ),
             ],
             id="delete_from_included",
         ),
@@ -606,7 +636,13 @@ def test_expand_defaults_list(
             ["~a"],
             [
                 DefaultElement(config_name="test_overrides"),
-                DefaultElement(config_group="a", config_name="a1", is_deleted=True),
+                DefaultElement(
+                    config_group="a",
+                    config_name="a1",
+                    is_deleted=True,
+                    skip_load=True,
+                    skip_load_reason="deleted_from_list",
+                ),
                 DefaultElement(config_group="a", package="pkg", config_name="a1"),
                 DefaultElement(config_group="c", config_name="c1"),
             ],
@@ -617,7 +653,13 @@ def test_expand_defaults_list(
             ["~a=a1"],
             [
                 DefaultElement(config_name="test_overrides"),
-                DefaultElement(config_group="a", config_name="a1", is_deleted=True),
+                DefaultElement(
+                    config_group="a",
+                    config_name="a1",
+                    is_deleted=True,
+                    skip_load=True,
+                    skip_load_reason="deleted_from_list",
+                ),
                 DefaultElement(config_group="a", package="pkg", config_name="a1"),
                 DefaultElement(config_group="c", config_name="c1"),
             ],
@@ -641,7 +683,12 @@ def test_expand_defaults_list(
                 DefaultElement(config_name="test_overrides"),
                 DefaultElement(config_group="a", config_name="a1"),
                 DefaultElement(
-                    config_group="a", package="pkg", config_name="a1", is_deleted=True
+                    config_group="a",
+                    package="pkg",
+                    config_name="a1",
+                    is_deleted=True,
+                    skip_load=True,
+                    skip_load_reason="deleted_from_list",
                 ),
                 DefaultElement(config_group="c", config_name="c1"),
             ],
@@ -652,13 +699,21 @@ def test_expand_defaults_list(
             ["a=foo", "~a"],
             [
                 DefaultElement(config_name="test_overrides"),
-                DefaultElement(config_group="a", config_name="a1", is_deleted=True),
+                DefaultElement(
+                    config_group="a",
+                    config_name="a1",
+                    is_deleted=True,
+                    skip_load=True,
+                    skip_load_reason="deleted_from_list",
+                ),
                 DefaultElement(config_group="a", package="pkg", config_name="a1"),
                 DefaultElement(config_group="c", config_name="c1"),
                 DefaultElement(
                     config_group="a",
                     config_name="foo",
                     is_deleted=True,
+                    skip_load=True,
+                    skip_load_reason="deleted_from_list",
                     from_override=True,
                 ),
             ],

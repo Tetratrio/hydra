@@ -230,11 +230,13 @@ def delete_if_matching(delete_groups: Dict[DeleteKey, int], d: DefaultElement) -
                 matched = True
                 delete_groups[delete] += 1
                 d.is_deleted = True
+                d.set_skip_load("deleted_from_list")
             else:
                 if delete.config_name == d.config_name:
                     matched = True
                     delete_groups[delete] += 1
                     d.is_deleted = True
+                    d.set_skip_load("deleted_from_list")
 
     return matched
 
