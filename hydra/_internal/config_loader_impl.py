@@ -187,13 +187,26 @@ class ConfigLoaderImpl(ConfigLoader):
         from_shell: bool = True,
     ) -> DictConfig:
         try:
-            return self._load_configuration(
+            cfg = self._load_configuration(
                 config_name=config_name,
                 overrides=overrides,
                 run_mode=run_mode,
                 strict=strict,
                 from_shell=from_shell,
             )
+
+            cfg2 = self._new_load_configuration(
+                config_name=config_name,
+                overrides=overrides,
+                run_mode=run_mode,
+                strict=strict,
+                from_shell=from_shell,
+            )
+
+            if cfg != cfg2:
+                raise ValueError("mismatch")
+
+            return cfg
         except OmegaConfBaseException as e:
             raise ConfigCompositionException().with_traceback(sys.exc_info()[2]) from e
 
@@ -311,21 +324,123 @@ class ConfigLoaderImpl(ConfigLoader):
             for key in cfg.hydra.job.env_copy:
                 cfg.hydra.job.env_set[key] = os.environ[key]
 
-        # # TODO: integrate new defaults logic
-        # input_defaults = [DefaultElement(config_name="hydra_config")]
+        return cfg
+
+    def _new_load_configuration(
+        self,
+        config_name: Optional[str],
+        overrides: List[str],
+        run_mode: RunMode,
+        strict: Optional[bool] = None,
+        from_shell: bool = True,
+    ) -> DictConfig:
+        if config_name is not None and not self.repository.config_exists(config_name):
+            self.missing_config_error(
+                config_name=config_name,
+                msg=f"Cannot find primary config : {config_name}, check that it's in your config search path",
+                with_search_path=True,
+            )
+
+        if strict is None:
+            strict = self.default_strict
+
+        parser = OverridesParser.create()
+        parsed_overrides = parser.parse_overrides(overrides=overrides)
+        config_overrides = ConfigLoaderImpl.parse_overrides(
+            overrides=overrides, run_mode=run_mode, from_shell=from_shell
+        )
+
+        split_res = self.split_by_override_type(config_overrides)
+        config_group_overrides = split_res.config_group_overrides
+        config_overrides = split_res.config_overrides
+
+        input_defaults = [DefaultElement(config_name="new_hydra_config")]
+
+        if config_name is not None:
+            input_defaults.append(DefaultElement(config_name=config_name, primary=True))
+
+        for default in convert_overrides_to_defaults(config_group_overrides):
+            input_defaults.append(default)
+
+        defaults = expand_defaults_list(
+            self_name=None,
+            defaults=input_defaults,
+            repo=self.repository,
+        )
+
+        cfg = self._new_merge_defaults_into_config(defaults=defaults)
+
+        OmegaConf.set_struct(cfg, strict)
+        # Apply command line overrides after enabling strict flag
+        ConfigLoaderImpl._apply_overrides_to_config(config_overrides, cfg)
+        app_overrides = []
+        for override in parsed_overrides:
+            if override.is_hydra_override():
+                cfg.hydra.overrides.hydra.append(override.input_line)
+            else:
+                cfg.hydra.overrides.task.append(override.input_line)
+                app_overrides.append(override)
+
+        with open_dict(cfg.hydra.job):
+            if "name" not in cfg.hydra.job:
+                cfg.hydra.job.name = JobRuntime().get("name")
+            cfg.hydra.job.override_dirname = get_overrides_dirname(
+                overrides=app_overrides,
+                kv_sep=cfg.hydra.job.config.override_dirname.kv_sep,
+                item_sep=cfg.hydra.job.config.override_dirname.item_sep,
+                exclude_keys=cfg.hydra.job.config.override_dirname.exclude_keys,
+            )
+            cfg.hydra.job.config_name = config_name
+
+            for key in cfg.hydra.job.env_copy:
+                cfg.hydra.job.env_set[key] = os.environ[key]
+
+        # # Load and defaults and merge them into cfg
+        # try:
+        #     cfg = self._merge_defaults_into_config(
+        #         hydra_cfg,
+        #         job_cfg,
+        #         job_cfg_load_trace,
+        #         defaults,
+        #         split_at,
+        #         run_mode=run_mode,
+        #     )
+        # except UnspecifiedMandatoryDefault as e:
+        #     options = self.get_group_options(e.config_group)
+        #     opt_list = "\n".join(["\t" + x for x in options])
+        #     msg = (
+        #         f"You must specify '{e.config_group}', e.g, {e.config_group}=<OPTION>"
+        #         f"\nAvailable options:"
+        #         f"\n{opt_list}"
+        #     )
+        #     raise ConfigCompositionException(msg) from e
         #
-        # if config_name is not None:
-        #     input_defaults.append(DefaultElement(config_name=config_name, primary=True))
+        # OmegaConf.set_struct(cfg, strict)
         #
-        # for default in convert_overrides_to_defaults(config_group_overrides):
-        #     input_defaults.append(default)
+        # # Apply command line overrides after enabling strict flag
+        # ConfigLoaderImpl._apply_overrides_to_config(config_overrides, cfg)
         #
-        # new_defaults = expand_defaults_list(
-        #     self_name=None,
-        #     defaults=input_defaults,
-        #     repo=self.repository,
-        # )
-        # # new defaults logic end
+        # app_overrides = []
+        # for override in parsed_overrides:
+        #     if override.is_hydra_override():
+        #         cfg.hydra.overrides.hydra.append(override.input_line)
+        #     else:
+        #         cfg.hydra.overrides.task.append(override.input_line)
+        #         app_overrides.append(override)
+        #
+        # with open_dict(cfg.hydra.job):
+        #     if "name" not in cfg.hydra.job:
+        #         cfg.hydra.job.name = JobRuntime().get("name")
+        #     cfg.hydra.job.override_dirname = get_overrides_dirname(
+        #         overrides=app_overrides,
+        #         kv_sep=cfg.hydra.job.config.override_dirname.kv_sep,
+        #         item_sep=cfg.hydra.job.config.override_dirname.item_sep,
+        #         exclude_keys=cfg.hydra.job.config.override_dirname.exclude_keys,
+        #     )
+        #     cfg.hydra.job.config_name = config_name
+        #
+        #     for key in cfg.hydra.job.env_copy:
+        #         cfg.hydra.job.env_set[key] = os.environ[key]
 
         return cfg
 
@@ -638,7 +753,6 @@ class ConfigLoaderImpl(ConfigLoader):
                     )
 
                     try:
-                        # TODO: this should probably go
                         if is_primary_config:
                             # Add as placeholders for hydra and defaults to allow
                             # overriding them from the config even if not in schema
@@ -656,7 +770,6 @@ class ConfigLoaderImpl(ConfigLoader):
                             if "defaults" in merged and merged["defaults"] == []:
                                 del merged["defaults"]
                         ret.config = merged
-                        # TODO REMOVE END
 
                     except OmegaConfBaseException as e:
                         raise ConfigCompositionException(
@@ -700,6 +813,100 @@ class ConfigLoaderImpl(ConfigLoader):
                     record_load=record_load,
                 ),
             )
+
+    def _new_load_config_impl(
+        self, default: DefaultElement, record_load: bool = True
+    ) -> Optional[ConfigResult]:
+        config_path = default.config_path()
+        package_override = default.package
+        ret = self.repository.load_config(
+            config_path=config_path,
+            is_primary_config=default.primary,
+            package_override=package_override,
+        )
+
+        if ret is None:
+            # TODO: verify this records as not found
+            self._record_loading(
+                name=config_path,
+                path=None,
+                provider=None,
+                schema_provider=None,
+                record_load=record_load,
+            ),
+
+            if not default.optional:
+                if default.config_group is None:
+                    msg = f"Could not load {config_path}"
+                    raise MissingConfigException(msg, config_path)
+                else:
+                    options = self.get_group_options(default.config_group)
+                    if options:
+                        opt_list = "\n".join(["\t" + x for x in options])
+                        msg = (
+                            f"Could not load {config_path}.\nAvailable options:"
+                            f"\n{opt_list}"
+                        )
+                    else:
+                        msg = f"Could not load {config_path}"
+                    raise MissingConfigException(msg, config_path, options)
+
+            return None
+        else:
+            if not isinstance(ret.config, DictConfig):
+                raise ValueError(
+                    f"Config {config_path} must be a Dictionary, got {type(ret).__name__}"
+                )
+            if not ret.is_schema_source:
+                schema = None
+                try:
+                    schema_source = self.repository.get_schema_source()
+                    config_path = ConfigSource._normalize_file_name(
+                        filename=config_path
+                    )
+                    schema = schema_source.load_config(
+                        config_path,
+                        is_primary_config=default.primary,
+                        package_override=package_override,
+                    )
+
+                except ConfigLoadError:
+                    # schema not found, ignore
+                    pass
+
+                schema_provider = None
+                if schema is not None:
+                    try:
+                        schema_provider = schema.provider
+                        merged = OmegaConf.merge(schema.config, ret.config)
+                        assert isinstance(merged, DictConfig)
+                        ret.config = merged
+                    except OmegaConfBaseException as e:
+                        raise ConfigCompositionException(
+                            f"Error merging '{config_path}' with schema"
+                        ) from e
+
+                    assert isinstance(merged, DictConfig)
+
+                self._record_loading(
+                    name=config_path,
+                    path=ret.path,
+                    provider=ret.provider,
+                    schema_provider=schema_provider,
+                    record_load=record_load,
+                ),
+
+                return ret
+
+            self._record_loading(
+                name=config_path,
+                path=ret.path,
+                provider=ret.provider,
+                schema_provider=None,
+                record_load=record_load,
+            ),
+
+            return ret
 
     def list_groups(self, parent_name: str) -> List[str]:
         return self.get_group_options(
@@ -842,6 +1049,99 @@ class ConfigLoaderImpl(ConfigLoader):
         if "defaults" in hydra_cfg:
             del hydra_cfg["defaults"]
         return hydra_cfg
+
+    def _new_merge_defaults_into_config(
+        self, defaults: List[DefaultElement]
+    ) -> DictConfig:
+        cfg = OmegaConf.create()
+        for default in defaults:
+            loaded = self._new_load_config_impl(default=default, record_load=True)
+
+            merged = OmegaConf.merge(cfg, loaded.config)
+            cfg = merged
+            # merged = self._merge_config(
+            #     cfg=cfg,
+            #     config_group=default.config_group,
+            #     name=default.config_name,
+            #     required=not default.optional,
+            #     is_primary_config=default.primary,
+            #     package_override=default.get_subject_package(),
+            # )
+        return cfg
+
+        # def merge_defaults_list_into_config(
+        #     merged_cfg: DictConfig, def_list: List[DefaultElement]
+        # ) -> DictConfig:
+        #     # Reconstruct the defaults to make use of the interpolation capabilities of OmegaConf.
+        #     dict_with_list = OmegaConf.create({"defaults": []})
+        #     for item in def_list:
+        #         d: Any
+        #         if item.config_group is not None:
+        #             d = {item.config_group: item.config_name}
+        #         else:
+        #             d = item.config_name
+        #         dict_with_list.defaults.append(d)
+        #
+        #     for idx, default1 in enumerate(def_list):
+        #         if default1.config_group is not None:
+        #             if OmegaConf.is_missing(
+        #                 dict_with_list.defaults[idx], default1.config_group
+        #             ):
+        #                 if run_mode == RunMode.RUN:
+        #                     raise UnspecifiedMandatoryDefault(
+        #                         config_group=default1.config_group
+        #                     )
+        #                 else:
+        #                     config_name = "???"
+        #             else:
+        #                 config_name = dict_with_list.defaults[idx][
+        #                     default1.config_group
+        #                 ]
+        #         else:
+        #             config_name = dict_with_list.defaults[idx]
+        #
+        #         if config_name == "__SELF__":
+        #             if "defaults" in job_cfg:
+        #                 with open_dict(job_cfg):
+        #                     del job_cfg["defaults"]
+        #             merged_cfg.merge_with(job_cfg)
+        #             if job_cfg_load_trace is not None:
+        #                 self.all_config_checked.append(job_cfg_load_trace)
+        #         elif default1.config_group is not None:
+        #             if default1.config_name not in (None, "_SKIP_", "???"):
+        #                 merged_cfg = self._merge_config(
+        #                     cfg=merged_cfg,
+        #                     config_group=default1.config_group,
+        #                     name=config_name,
+        #                     required=not default1.optional,
+        #                     is_primary_config=False,
+        #                     package_override=default1.package,
+        #                 )
+        #         else:
+        #             if default1.config_name != "_SKIP_":
+        #                 merged_cfg = self._merge_config(
+        #                     cfg=merged_cfg,
+        #                     config_group="",
+        #                     name=config_name,
+        #                     required=True,
+        #                     is_primary_config=False,
+        #                     package_override=default1.package,
+        #                 )
+        #     return merged_cfg
+        #
+        # system_list: List[DefaultElement] = []
+        # user_list: List[DefaultElement] = []
+        # for default in defaults:
+        #     if len(system_list) < split_at:
+        #         system_list.append(default)
+        #     else:
+        #         user_list.append(default)
+        # hydra_cfg = merge_defaults_list_into_config(hydra_cfg, system_list)
+        # hydra_cfg = merge_defaults_list_into_config(hydra_cfg, user_list)
+        #
+        # if "defaults" in hydra_cfg:
+        #     del hydra_cfg["defaults"]
+        # return hydra_cfg
 
     def _load_primary_config(
         self, cfg_filename: Optional[str], record_load: bool = True

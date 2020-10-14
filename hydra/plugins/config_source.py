@@ -344,4 +344,7 @@ class ConfigSource(Plugin):
             with open_dict(cfg):
                 defaults = cfg.pop("defaults", OmegaConf.create([]))
 
-        return ConfigSource._create_defaults_list(defaults)
+        if len(defaults) > 0:
+            return ConfigSource._create_defaults_list(defaults)
+        else:
+            return []

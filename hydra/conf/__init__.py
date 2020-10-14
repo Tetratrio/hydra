@@ -150,7 +150,8 @@ class HydraConf:
     verbose: Any = False
 
 
-ConfigStore.instance().store(
+cstore = ConfigStore.instance()
+cstore.store(
     name="hydra_config",
     node={
         # Hydra composition defaults
@@ -158,5 +159,18 @@ ConfigStore.instance().store(
         # Hydra config
         "hydra": HydraConf,
     },
+    provider="hydra",
+)
+
+
+@dataclass
+class NewHydraConf(HydraConf):
+    defaults: List[Any] = field(default_factory=lambda: hydra_defaults.copy())
+
+
+cstore.store(
+    name="new_hydra_config",
+    node=NewHydraConf,
+    package="hydra",
     provider="hydra",
 )

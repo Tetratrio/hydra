@@ -68,22 +68,34 @@ class DefaultElement:
             ret = f"~{ret}"
 
         flags = []
-        if not self.primary:
-            flags.append("primary")
-        if self.is_deleted:
-            flags.append("deleted")
+        flag_names = [
+            "primary",
+            "is_delete",
+            "is_deleted",
+            "optional",
+            "from_override",
+            "is_add_only",
+        ]
+        for flag in flag_names:
+            if getattr(self, flag):
+                flags.append(flag)
 
-        if self.is_delete:
-            flags.append("delete")
-
-        if self.optional:
-            flags.append("optional")
-
-        if not self.from_override:
-            flags.append("from_override")
-
-        if not self.is_add_only:
-            flags.append("is_add_only")
+        # if not self.primary:
+        #     flags.append("primary")
+        # if self.is_deleted:
+        #     flags.append("deleted")
+        #
+        # if self.is_delete:
+        #     flags.append("delete")
+        #
+        # if self.optional:
+        #     flags.append("optional")
+        #
+        # if self.from_override:
+        #     flags.append("from_override")
+        #
+        # if self.is_add_only:
+        #     flags.append("is_add_only")
 
         if len(flags) > 0:
             return f"{ret} ({','.join(flags)})"
