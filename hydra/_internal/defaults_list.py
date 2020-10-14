@@ -63,6 +63,13 @@ def _post_process_deletes(
 
 
 def expand_defaults_list(
+    defaults: List[DefaultElement],
+    repo: ConfigRepository,
+) -> List[DefaultElement]:
+    return _expand_defaults_list(self_name=None, defaults=defaults, repo=repo)
+
+
+def _expand_defaults_list(
     self_name: Optional[str],
     defaults: List[DefaultElement],
     repo: ConfigRepository,
@@ -111,11 +118,9 @@ def _validate_self(element: DefaultElement, defaults: DefaultsList) -> None:
             d.package = element.package
 
     if not has_self:
-        me = DefaultElement(
-            config_group=element.config_group,
-            config_name="_self_",
-            package=element.package,
-        )
+        me = copy.deepcopy(element)
+        me.config_name = "_self_"
+        me.from_override = False
         defaults.effective.insert(0, me)
 
 
@@ -137,20 +142,20 @@ def _compute_element_defaults_list_impl(
         is_primary_config=element.primary,
     )
 
-    if loaded is None and not element.optional:
-        missing_config_error(
-            repo=repo,
-            config_name=element.config_path(),
-            msg=f"Cannot find config : {element.config_path()}, check that it's in your config search path",
-            with_search_path=True,
-        )
-
-    if loaded is not None:
+    if loaded is None:
+        if element.optional:
+            element.set_skip_load("missing_optional_config")
+            return [element]
+        else:
+            missing_config_error(
+                repo=repo,
+                config_name=element.config_path(),
+                msg=f"Cannot find config : {element.config_path()}, check that it's in your config search path",
+                with_search_path=True,
+            )
+    else:
         original = copy.deepcopy(loaded.defaults_list)
         effective = loaded.defaults_list
-    else:
-        original = []
-        effective = []
 
     defaults = DefaultsList(original=original, effective=effective)
     _validate_self(element, defaults)
@@ -283,6 +288,7 @@ def _expand_defaults_list_impl(
         else:
             fqgn = d.fully_qualified_group_name()
             if fqgn in group_to_choice:
+                # TODO: just set d.config_name directly here?
                 new_config_name = group_to_choice[fqgn]
             else:
                 new_config_name = d.config_name
@@ -303,6 +309,7 @@ def _expand_defaults_list_impl(
                 dd.config_group is not None
                 and dd.config_name != "_keep_"
                 and not dd.is_delete
+                and not dd.skip_load
             ):
                 fqgn = dd.fully_qualified_group_name()
                 if fqgn not in group_to_choice and not d.is_interpolation():
@@ -318,6 +325,7 @@ def _expand_defaults_list_impl(
 
     # prepare a local group_to_choice with the defaults to support
     # legacy interpolations like ${defaults.1.a}
+    # TODO: deprecated this interpolation style in the defaults list
     group_to_choice2 = copy.deepcopy(group_to_choice)
     group_to_choice2.defaults = []
     for d in defaults_list.original:

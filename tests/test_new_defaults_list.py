@@ -332,6 +332,22 @@ Plugins.instance()
             ],
             id="interpolation",
         ),
+        # optional
+        pytest.param(
+            DefaultElement(config_name="with_optional"),
+            [
+                DefaultElement(config_name="with_optional"),
+                DefaultElement(config_group="a", config_name="a1", optional=True),
+                DefaultElement(
+                    config_group="foo",
+                    config_name="bar",
+                    optional=True,
+                    skip_load=True,
+                    skip_load_reason="missing_optional_config",
+                ),
+            ],
+            id="optional",
+        ),
     ],
 )
 def test_compute_element_defaults_list(
@@ -398,7 +414,7 @@ def test_expand_defaults_list(
     csp.append(provider="test", path="file://tests/test_data/new_defaults_lists")
     repo = ConfigRepository(config_search_path=csp)
 
-    ret = expand_defaults_list(self_name=None, defaults=input_defaults, repo=repo)
+    ret = expand_defaults_list(defaults=input_defaults, repo=repo)
     assert ret == expected
 
 
@@ -456,7 +472,7 @@ def test_expand_defaults_list(
             ["+b=b1"],
             [
                 DefaultElement(config_name="no_defaults"),
-                DefaultElement(config_group="b", config_name="b1"),
+                DefaultElement(config_group="b", config_name="b1", is_add_only=True),
             ],
             id="adding_item",
         ),
@@ -479,9 +495,7 @@ def test_expand_defaults_list(
                 DefaultElement(config_group="a", package="pkg", config_name="a1"),
                 DefaultElement(config_group="c", config_name="c1"),
                 DefaultElement(
-                    config_group="b",
-                    package="pkg",
-                    config_name="b1",
+                    config_group="b", package="pkg", config_name="b1", is_add_only=True
                 ),
             ],
             id="adding_item_at_package",
@@ -711,9 +725,9 @@ def test_apply_overrides_to_defaults(
 
     if isinstance(expected, list):
         defaults = create_defaults()
-        ret = expand_defaults_list(self_name=None, defaults=defaults, repo=repo)
+        ret = expand_defaults_list(defaults=defaults, repo=repo)
         assert ret == expected
     else:
         with expected:
             defaults = create_defaults()
-            expand_defaults_list(self_name=None, defaults=defaults, repo=repo)
+            expand_defaults_list(defaults=defaults, repo=repo)

@@ -30,6 +30,9 @@ class DefaultElement:
     # True for the primary config (the one in compose() or @hydra.main())
     primary: bool = False
 
+    skip_load: bool = False
+    skip_load_reason: str = ""
+
     def config_path(self) -> str:
         assert self.config_name is not None
         if self.config_group is not None:
@@ -80,22 +83,8 @@ class DefaultElement:
             if getattr(self, flag):
                 flags.append(flag)
 
-        # if not self.primary:
-        #     flags.append("primary")
-        # if self.is_deleted:
-        #     flags.append("deleted")
-        #
-        # if self.is_delete:
-        #     flags.append("delete")
-        #
-        # if self.optional:
-        #     flags.append("optional")
-        #
-        # if self.from_override:
-        #     flags.append("from_override")
-        #
-        # if self.is_add_only:
-        #     flags.append("is_add_only")
+        if self.skip_load:
+            flags.append(f"skip-load:{self.skip_load_reason}")
 
         if len(flags) > 0:
             return f"{ret} ({','.join(flags)})"
@@ -123,3 +112,7 @@ class DefaultElement:
         node = OmegaConf.create({self.config_group: self.config_name})
         node._set_parent(group_to_choice)
         self.config_name = node[self.config_group]
+
+    def set_skip_load(self, reason: str) -> None:
+        self.skip_load = True
+        self.skip_load_reason = reason
