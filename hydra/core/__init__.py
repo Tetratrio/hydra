@@ -41,6 +41,8 @@ class DefaultElement:
             return self.config_name
 
     def fully_qualified_group_name(self) -> str:
+        if self.config_group is None:
+            return None
         if self.package is not None:
             return f"{self.config_group}@{self.package}"
         else:

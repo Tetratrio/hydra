@@ -69,25 +69,53 @@ def expand_defaults_list(
     return _expand_defaults_list(self_name=None, defaults=defaults, repo=repo)
 
 
+def _update_known_state(
+    d: DefaultElement,
+    group_to_choice: DictConfig,
+    delete_groups: Dict[DeleteKey, int],
+) -> None:
+    fqgn = d.fully_qualified_group_name()
+    if fqgn is None:
+        return
+
+    is_overridden = fqgn in group_to_choice
+
+    if d.config_group is not None:
+        if (
+            fqgn not in group_to_choice
+            and not d.is_delete
+            and d.config_name not in ("_self_", "_keep_")
+            and not is_matching_deletion(delete_groups=delete_groups, d=d)
+        ):
+            group_to_choice[d.fully_qualified_group_name()] = d.config_name
+
+    if d.is_delete:
+        if is_overridden:
+            d.is_delete = False
+            d.config_name = group_to_choice[fqgn]
+        else:
+            delete_key = DeleteKey(
+                d.fully_qualified_group_name(),
+                d.config_name if d.config_name != "_delete_" else None,
+                must_delete=d.from_override,
+            )
+            if delete_key not in delete_groups:
+                delete_groups[delete_key] = 0
+
+
 def _expand_defaults_list(
     self_name: Optional[str],
     defaults: List[DefaultElement],
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
     group_to_choice = OmegaConf.create({})
-    delete_groups = {}
+    delete_groups: Dict[DeleteKey, int] = {}
     for d in reversed(defaults):
-        if d.is_delete:  # TODO: consolidate delete group updates into a function
-            delete_key = DeleteKey(
-                d.fully_qualified_group_name(),
-                d.config_name if d.config_name != "_delete_" else None,
-                must_delete=d.from_override,
-            )
-            delete_groups[delete_key] = 0
-        else:
-            if d.config_group is not None:
-                if d.fully_qualified_group_name() not in group_to_choice:
-                    group_to_choice[d.fully_qualified_group_name()] = d.config_name
+        _update_known_state(
+            d,
+            group_to_choice=group_to_choice,
+            delete_groups=delete_groups,
+        )
 
     dl = DefaultsList(
         original=copy.deepcopy(defaults),
@@ -186,7 +214,7 @@ def _find_match_before(
 
 def _verify_no_add_conflicts(defaults: List[DefaultElement]) -> None:
     for d in reversed(defaults):
-        if d.from_override and not d.is_delete:
+        if d.from_override and not d.skip_load and not d.is_delete:
             fqgn = d.fully_qualified_group_name()
             match = _find_match_before(defaults, d)
             if d.is_add_only and match is not None:
@@ -225,22 +253,33 @@ def _process_renames(defaults: List[DefaultElement]) -> None:
 
 
 def delete_if_matching(delete_groups: Dict[DeleteKey, int], d: DefaultElement) -> bool:
+    return is_matching_deletion(
+        delete_groups=delete_groups, d=d, mark_item_as_deleted=True
+    )
+
+
+def is_matching_deletion(
+    delete_groups: Dict[DeleteKey, int],
+    d: DefaultElement,
+    mark_item_as_deleted: bool = False,
+) -> bool:
     matched = False
     for delete in delete_groups:
         if delete.fqgn == d.fully_qualified_group_name():
             if delete.config_name is None:
                 # fqdn only
                 matched = True
-                delete_groups[delete] += 1
-                d.is_deleted = True
-                d.set_skip_load("deleted_from_list")
-            else:
-                if delete.config_name == d.config_name:
-                    matched = True
+                if mark_item_as_deleted:
                     delete_groups[delete] += 1
                     d.is_deleted = True
                     d.set_skip_load("deleted_from_list")
-
+            else:
+                if delete.config_name == d.config_name:
+                    matched = True
+                    if mark_item_as_deleted:
+                        delete_groups[delete] += 1
+                        d.is_deleted = True
+                        d.set_skip_load("deleted_from_list")
     return matched
 
 
@@ -260,6 +299,10 @@ def _expand_defaults_list_impl(
 
     ret: List[Union[DefaultElement, List[DefaultElement]]] = []
     for d in reversed(defaults):
+        _update_known_state(
+            d, group_to_choice=group_to_choice, delete_groups=delete_groups
+        )
+
         fqgn = d.fully_qualified_group_name()
         if d.config_name == "_self_":
             if self_name is None:
@@ -268,21 +311,14 @@ def _expand_defaults_list_impl(
                 )
             d = copy.deepcopy(d)
             # override self_name
-            if fqgn in group_to_choice:
+            if fqgn is not None and fqgn in group_to_choice:
                 d.config_name = group_to_choice[fqgn]
             else:
                 d.config_name = self_name
             added_sublist = [d]
         elif d.is_package_rename():
             added_sublist = [d]  # defer rename
-        elif d.is_delete and not d.fully_qualified_group_name() in group_to_choice:
-            delete_key = DeleteKey(
-                fqgn,
-                d.config_name if d.config_name != "_delete_" else None,
-                must_delete=d.from_override,
-            )
-            if delete_key not in delete_groups:
-                delete_groups[delete_key] = 0
+        elif d.is_delete:
             added_sublist = [d]
         elif d.from_override:
             added_sublist = [d]  # defer override processing
@@ -294,7 +330,7 @@ def _expand_defaults_list_impl(
             if delete_if_matching(delete_groups, d):
                 added_sublist = [d]
             else:
-                if fqgn in group_to_choice:
+                if fqgn is not None and fqgn in group_to_choice:
                     d.config_name = group_to_choice[fqgn]
                     if d.is_delete:
                         d.is_delete = False
@@ -306,23 +342,19 @@ def _expand_defaults_list_impl(
                     repo=repo,
                 )
 
-        for dd in reversed(added_sublist):
-            if (
-                dd.config_group is not None
-                and dd.config_name != "_keep_"
-                and not dd.is_delete
-                and not dd.skip_load
-            ):
-                fqgn = dd.fully_qualified_group_name()
-                if fqgn not in group_to_choice and not dd.is_interpolation():
-                    group_to_choice[fqgn] = dd.config_name
-
         ret.append(added_sublist)
 
     ret.reverse()
     result: List[DefaultElement] = [item for sublist in ret for item in sublist]  # type: ignore
 
     _process_renames(result)
+
+    # process deletes
+    for element in reversed(result):
+        if not element.is_delete:
+            delete_if_matching(delete_groups, element)
+    # result[:] = filterfalse(lambda x: x.is_delete, result)
+
     _verify_no_add_conflicts(result)
 
     # prepare a local group_to_choice with the defaults to support

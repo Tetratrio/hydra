@@ -646,7 +646,7 @@ def test_expand_defaults_list(
                 DefaultElement(config_group="a", package="pkg", config_name="a1"),
                 DefaultElement(config_group="c", config_name="c1"),
             ],
-            id="delete",
+            id="delete ~a",
         ),
         pytest.param(
             "test_overrides",
@@ -663,7 +663,18 @@ def test_expand_defaults_list(
                 DefaultElement(config_group="a", package="pkg", config_name="a1"),
                 DefaultElement(config_group="c", config_name="c1"),
             ],
-            id="delete",
+            id="delete ~a=a1",
+        ),
+        pytest.param(
+            "no_defaults",
+            ["~a=zzz"],
+            pytest.raises(
+                ConfigCompositionException,
+                match=re.escape(
+                    "Could not delete. No match for 'a=zzz' in the defaults list."
+                ),
+            ),
+            id="delete ~a=zzz",
         ),
         pytest.param(
             "test_overrides",
@@ -674,7 +685,7 @@ def test_expand_defaults_list(
                     "Could not delete. No match for 'a=zzz' in the defaults list."
                 ),
             ),
-            id="delete",
+            id="delete ~a=zzz",
         ),
         pytest.param(
             "test_overrides",
@@ -692,7 +703,23 @@ def test_expand_defaults_list(
                 ),
                 DefaultElement(config_group="c", config_name="c1"),
             ],
-            id="delete",
+            id="delete ~a@pkg",
+        ),
+        pytest.param(
+            "no_defaults",
+            ["a=foo", "~a"],
+            [
+                DefaultElement(config_name="no_defaults"),
+                DefaultElement(
+                    config_group="a",
+                    config_name="foo",
+                    from_override=True,
+                    is_deleted=True,
+                    skip_load=True,
+                    skip_load_reason="deleted_from_list",
+                ),
+            ],
+            id="delete_after_set_from_overrides",
         ),
         pytest.param(
             "test_overrides",
