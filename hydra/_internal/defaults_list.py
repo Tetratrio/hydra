@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from itertools import filterfalse
 from typing import Dict, List, Optional, Union
 
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import II, DictConfig, OmegaConf
 
 from hydra._internal.config_repository import ConfigRepository
 from hydra.core import DefaultElement
@@ -89,7 +89,10 @@ def _expand_defaults_list(
                 if d.fully_qualified_group_name() not in group_to_choice:
                     group_to_choice[d.fully_qualified_group_name()] = d.config_name
 
-    dl = DefaultsList(original=copy.deepcopy(defaults), effective=defaults)
+    dl = DefaultsList(
+        original=copy.deepcopy(defaults),
+        effective=copy.deepcopy(defaults),
+    )
     ret = _expand_defaults_list_impl(
         self_name=self_name,
         defaults_list=dl,
@@ -155,7 +158,7 @@ def _compute_element_defaults_list_impl(
             )
     else:
         original = copy.deepcopy(loaded.defaults_list)
-        effective = loaded.defaults_list
+        effective = copy.deepcopy(loaded.defaults_list)
 
     defaults = DefaultsList(original=original, effective=effective)
     _validate_self(element, defaults)
@@ -309,7 +312,7 @@ def _expand_defaults_list_impl(
                 and not dd.skip_load
             ):
                 fqgn = dd.fully_qualified_group_name()
-                if fqgn not in group_to_choice and not d.is_interpolation():
+                if fqgn not in group_to_choice and not dd.is_interpolation():
                     group_to_choice[fqgn] = dd.config_name
 
         ret.append(added_sublist)
@@ -327,7 +330,7 @@ def _expand_defaults_list_impl(
     group_to_choice2.defaults = []
     for d in defaults_list.original:
         if d.config_group is not None:
-            group_to_choice2.defaults.append({d.config_group: d.config_name})
+            group_to_choice2.defaults.append({d.config_group: II(d.config_group)})
         else:
             group_to_choice2.defaults.append(d.config_name)
 

@@ -755,6 +755,51 @@ def test_expand_defaults_list(
             ),
             id="syntax_error",
         ),
+        # interpolation
+        pytest.param(
+            "interpolation/i1",
+            [],
+            [
+                DefaultElement(config_name="interpolation/i1"),
+                DefaultElement(config_group="a", config_name="a1"),
+                DefaultElement(config_group="b", config_name="b1"),
+                DefaultElement(config_group="a_b", config_name="a1_b1"),
+            ],
+            id="interpolation",
+        ),
+        pytest.param(
+            "interpolation/i1",
+            ["a=a6"],
+            [
+                DefaultElement(config_name="interpolation/i1"),
+                DefaultElement(config_group="a", config_name="a6"),
+                DefaultElement(config_group="b", config_name="b1"),
+                DefaultElement(config_group="a_b", config_name="a6_b1"),
+            ],
+            id="interpolation",
+        ),
+        pytest.param(
+            "interpolation/i2_legacy_with_self",
+            ["a=a6"],
+            [
+                DefaultElement(config_name="interpolation/i2_legacy_with_self"),
+                DefaultElement(config_group="a", config_name="a6"),
+                DefaultElement(config_group="b", config_name="b1"),
+                DefaultElement(config_group="a_b", config_name="a6_b1"),
+            ],
+            id="interpolation",
+        ),
+        pytest.param(
+            "interpolation/i3_legacy_without_self",
+            ["a=a6"],
+            [
+                DefaultElement(config_name="interpolation/i3_legacy_without_self"),
+                DefaultElement(config_group="a", config_name="a6"),
+                DefaultElement(config_group="b", config_name="b1"),
+                DefaultElement(config_group="a_b", config_name="a6_b1"),
+            ],
+            id="interpolation",
+        ),
     ],
 )
 def test_apply_overrides_to_defaults(
