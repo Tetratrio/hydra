@@ -77,7 +77,7 @@ def _expand_defaults_list(
     group_to_choice = OmegaConf.create({})
     delete_groups = {}
     for d in reversed(defaults):
-        if d.is_delete:
+        if d.is_delete:  # TODO: consolidate delete group updates into a function
             delete_key = DeleteKey(
                 d.fully_qualified_group_name(),
                 d.config_name if d.config_name != "_delete_" else None,
@@ -138,7 +138,7 @@ def _compute_element_defaults_list_impl(
 
     deleted = delete_if_matching(delete_groups, element)
     if deleted:
-        return []
+        return []  # TODO: there is another in the caller
 
     loaded = repo.load_config(
         config_path=element.config_path(),
@@ -275,7 +275,7 @@ def _expand_defaults_list_impl(
             added_sublist = [d]
         elif d.is_package_rename():
             added_sublist = [d]  # defer rename
-        elif d.is_delete:
+        elif d.is_delete and not d.fully_qualified_group_name() in group_to_choice:
             delete_key = DeleteKey(
                 fqgn,
                 d.config_name if d.config_name != "_delete_" else None,
@@ -296,6 +296,8 @@ def _expand_defaults_list_impl(
             else:
                 if fqgn in group_to_choice:
                     d.config_name = group_to_choice[fqgn]
+                    if d.is_delete:
+                        d.is_delete = False
 
                 added_sublist = _compute_element_defaults_list_impl(
                     element=d,

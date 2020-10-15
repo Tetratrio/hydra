@@ -719,6 +719,15 @@ def test_expand_defaults_list(
             ],
             id="delete_after_set_from_overrides",
         ),
+        pytest.param(
+            "delete/d10",
+            ["b=b1"],
+            [
+                DefaultElement(config_name="delete/d10"),
+                DefaultElement(config_group="b", config_name="b1"),
+            ],
+            id="override_deletion",
+        ),
         # syntax error
         pytest.param(
             "test_overrides",
