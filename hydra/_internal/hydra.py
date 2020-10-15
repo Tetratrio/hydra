@@ -1,7 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import copy
 import logging
-import os
 import string
 import sys
 import warnings
@@ -104,6 +103,21 @@ class Hydra:
             run_mode=RunMode.RUN,
         )
         HydraConfig.instance().set_config(cfg)
+
+        # TODO: remove later
+        cfg2 = self.config_loader._new_load_configuration(
+            config_name=config_name,
+            overrides=overrides,
+            run_mode=RunMode.RUN,
+            strict=True,
+            from_shell=True,
+        )
+
+        OmegaConf.set_cache(cfg2, OmegaConf.get_cache(cfg))
+        if cfg != cfg2:
+            raise ValueError("mismatch")
+        # TODO: end remove block
+
         return run_job(
             config=cfg,
             task_function=task_function,
@@ -128,6 +142,20 @@ class Hydra:
             run_mode=RunMode.MULTIRUN,
         )
         HydraConfig.instance().set_config(cfg)
+
+        # TODO: remove later
+        cfg2 = self.config_loader._new_load_configuration(
+            config_name=config_name,
+            overrides=overrides,
+            run_mode=RunMode.MULTIRUN,
+            strict=True,
+            from_shell=True,
+        )
+        OmegaConf.set_cache(cfg2, OmegaConf.get_cache(cfg))
+        if cfg != cfg2:
+            raise ValueError("mismatch")
+        # TODO: end remove block
+
         sweeper = Plugins.instance().instantiate_sweeper(
             config=cfg, config_loader=self.config_loader, task_function=task_function
         )
@@ -511,11 +539,6 @@ class Hydra:
             run_mode=run_mode,
             from_shell=from_shell,
         )
-        with open_dict(cfg):
-            from hydra import __version__
-
-            cfg.hydra.runtime.version = __version__
-            cfg.hydra.runtime.cwd = os.getcwd()
         if with_log_configuration:
             configure_log(cfg.hydra.hydra_logging, cfg.hydra.verbose)
             global log

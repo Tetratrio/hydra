@@ -195,17 +195,6 @@ class ConfigLoaderImpl(ConfigLoader):
                 from_shell=from_shell,
             )
 
-            cfg2 = self._new_load_configuration(
-                config_name=config_name,
-                overrides=overrides,
-                run_mode=run_mode,
-                strict=strict,
-                from_shell=from_shell,
-            )
-
-            if cfg != cfg2:
-                raise ValueError("mismatch")
-
             return cfg
         except OmegaConfBaseException as e:
             raise ConfigCompositionException().with_traceback(sys.exc_info()[2]) from e
@@ -324,6 +313,12 @@ class ConfigLoaderImpl(ConfigLoader):
             for key in cfg.hydra.job.env_copy:
                 cfg.hydra.job.env_set[key] = os.environ[key]
 
+        with open_dict(cfg):
+            from hydra import __version__
+
+            cfg.hydra.runtime.version = __version__
+            cfg.hydra.runtime.cwd = os.getcwd()
+
         return cfg
 
     def _new_load_configuration(
@@ -390,6 +385,12 @@ class ConfigLoaderImpl(ConfigLoader):
 
             for key in cfg.hydra.job.env_copy:
                 cfg.hydra.job.env_set[key] = os.environ[key]
+
+        with open_dict(cfg):
+            from hydra import __version__
+
+            cfg.hydra.runtime.version = __version__
+            cfg.hydra.runtime.cwd = os.getcwd()
 
         # # Load and defaults and merge them into cfg
         # try:
