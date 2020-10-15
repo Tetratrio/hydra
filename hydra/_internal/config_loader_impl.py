@@ -841,8 +841,19 @@ class ConfigLoaderImpl(ConfigLoader):
 
             if schema is not None:
                 try:
+                    # if config has a hydra node, remove it during validation and add it back.
+                    # This allows overriding Hydra's configuration without declaring this node
+                    # in every program
+                    hydra = None
+                    if "hydra" in ret.config:
+                        hydra = ret.config.pop("hydra")
+
                     merged = OmegaConf.merge(schema.config, ret.config)
                     assert isinstance(merged, DictConfig)
+
+                    if hydra is not None:
+                        with open_dict(merged):
+                            merged.hydra = hydra
                     ret.config = merged
                 except OmegaConfBaseException as e:
                     raise ConfigCompositionException(
