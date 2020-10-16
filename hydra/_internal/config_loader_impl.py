@@ -357,7 +357,10 @@ class ConfigLoaderImpl(ConfigLoader):
         for default in convert_overrides_to_defaults(config_group_overrides):
             input_defaults.append(default)
 
-        defaults = expand_defaults_list(defaults=input_defaults, repo=self.repository)
+        skip_missing = run_mode == RunMode.MULTIRUN
+        defaults = expand_defaults_list(
+            defaults=input_defaults, skip_missing=skip_missing, repo=self.repository
+        )
 
         cfg = self._new_merge_defaults_into_config(defaults=defaults)
 

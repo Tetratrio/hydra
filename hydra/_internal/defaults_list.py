@@ -34,6 +34,7 @@ class DefaultsList:
 def compute_element_defaults_list(
     element: DefaultElement,
     repo: ConfigRepository,
+    skip_missing: bool,
 ) -> List[DefaultElement]:
     group_to_choice = OmegaConf.create({})
     delete_groups: Dict[DeleteKey, int] = {}
@@ -41,6 +42,7 @@ def compute_element_defaults_list(
         element=element,
         group_to_choice=group_to_choice,
         delete_groups=delete_groups,
+        skip_missing=skip_missing,
         repo=repo,
     )
 
@@ -65,9 +67,15 @@ def _post_process_deletes(
 
 def expand_defaults_list(
     defaults: List[DefaultElement],
+    skip_missing: bool,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
-    return _expand_defaults_list(self_name=None, defaults=defaults, repo=repo)
+    return _expand_defaults_list(
+        self_name=None,
+        defaults=defaults,
+        skip_missing=skip_missing,
+        repo=repo,
+    )
 
 
 def _update_known_state(
@@ -107,6 +115,7 @@ def _update_known_state(
 def _expand_defaults_list(
     self_name: Optional[str],
     defaults: List[DefaultElement],
+    skip_missing: bool,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
     group_to_choice = OmegaConf.create({})
@@ -127,6 +136,7 @@ def _expand_defaults_list(
         defaults_list=dl,
         group_to_choice=group_to_choice,
         delete_groups=delete_groups,
+        skip_missing=skip_missing,
         repo=repo,
     )
 
@@ -160,6 +170,7 @@ def _compute_element_defaults_list_impl(
     element: DefaultElement,
     group_to_choice: DictConfig,
     delete_groups: Dict[DeleteKey, int],
+    skip_missing: bool,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
     # TODO: Should loaded configs be to cached in the repo to avoid loading more than once?
@@ -170,16 +181,20 @@ def _compute_element_defaults_list_impl(
         return []  # TODO: there is another in the caller
 
     if element.config_name == "???":
-        options = repo.get_group_options(
-            element.config_group, results_filter=ObjectType.CONFIG
-        )
-        opt_list = "\n".join(["\t" + x for x in options])
-        msg = (
-            f"You must specify '{element.config_group}', e.g, {element.config_group}=<OPTION>"
-            f"\nAvailable options:"
-            f"\n{opt_list}"
-        )
-        raise ConfigCompositionException(msg)
+        if skip_missing:
+            element.set_skip_load("missing_skipped")
+            return [element]
+        else:
+            options = repo.get_group_options(
+                element.config_group, results_filter=ObjectType.CONFIG
+            )
+            opt_list = "\n".join(["\t" + x for x in options])
+            msg = (
+                f"You must specify '{element.config_group}', e.g, {element.config_group}=<OPTION>"
+                f"\nAvailable options:"
+                f"\n{opt_list}"
+            )
+            raise ConfigCompositionException(msg)
 
     loaded = repo.load_config(
         config_path=element.config_path(),
@@ -209,6 +224,7 @@ def _compute_element_defaults_list_impl(
         defaults_list=defaults,
         group_to_choice=group_to_choice,
         delete_groups=delete_groups,
+        skip_missing=skip_missing,
         repo=repo,
     )
 
@@ -301,6 +317,7 @@ def _expand_defaults_list_impl(
     defaults_list: DefaultsList,
     group_to_choice: DictConfig,
     delete_groups: Dict[DeleteKey, int],
+    skip_missing: bool,
     repo: ConfigRepository,
 ) -> List[DefaultElement]:
 
@@ -352,6 +369,7 @@ def _expand_defaults_list_impl(
                     element=d,
                     group_to_choice=group_to_choice,
                     delete_groups=delete_groups,
+                    skip_missing=skip_missing,
                     repo=repo,
                 )
 
@@ -390,6 +408,7 @@ def _expand_defaults_list_impl(
             element=d,
             group_to_choice=group_to_choice,
             delete_groups=delete_groups,
+            skip_missing=skip_missing,
             repo=repo,
         )
         index = result.index(d)

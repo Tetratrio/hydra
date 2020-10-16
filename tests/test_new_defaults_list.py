@@ -413,11 +413,15 @@ def test_compute_element_defaults_list(
     repo = ConfigRepository(config_search_path=csp)
 
     if isinstance(expected, list):
-        ret = compute_element_defaults_list(element=element, repo=repo)
+        ret = compute_element_defaults_list(
+            element=element, skip_missing=False, repo=repo
+        )
         assert ret == expected
     else:
         with expected:
-            compute_element_defaults_list(element=element, repo=repo)
+            compute_element_defaults_list(
+                element=element, skip_missing=False, repo=repo
+            )
 
 
 @pytest.mark.parametrize(  # type: ignore
@@ -467,7 +471,7 @@ def test_expand_defaults_list(
     csp.append(provider="test", path="file://tests/test_data/new_defaults_lists")
     repo = ConfigRepository(config_search_path=csp)
 
-    ret = expand_defaults_list(defaults=input_defaults, repo=repo)
+    ret = expand_defaults_list(defaults=input_defaults, skip_missing=False, repo=repo)
     assert ret == expected
 
 
@@ -884,9 +888,41 @@ def test_apply_overrides_to_defaults(
 
     if isinstance(expected, list):
         defaults = create_defaults()
-        ret = expand_defaults_list(defaults=defaults, repo=repo)
+        ret = expand_defaults_list(defaults=defaults, skip_missing=False, repo=repo)
         assert ret == expected
     else:
         with expected:
             defaults = create_defaults()
-            expand_defaults_list(defaults=defaults, repo=repo)
+            expand_defaults_list(defaults=defaults, skip_missing=False, repo=repo)
+
+
+@pytest.mark.parametrize(  # type: ignore
+    "element,expected",
+    [
+        pytest.param(
+            DefaultElement(config_name="with_missing"),
+            [
+                DefaultElement(config_name="with_missing"),
+                DefaultElement(
+                    config_group="a",
+                    config_name="???",
+                    skip_load=True,
+                    skip_load_reason="missing_skipped",
+                ),
+            ],
+            id="with_missing",
+        ),
+    ],
+)
+def test_missing_with_skip_missing(
+    hydra_restore_singletons: Any,
+    element: DefaultElement,
+    expected: Any,
+) -> None:
+
+    csp = ConfigSearchPathImpl()
+    csp.append(provider="test", path="file://tests/test_data/new_defaults_lists")
+    repo = ConfigRepository(config_search_path=csp)
+
+    ret = compute_element_defaults_list(element=element, skip_missing=True, repo=repo)
+    assert ret == expected
