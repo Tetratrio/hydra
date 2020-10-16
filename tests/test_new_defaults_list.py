@@ -1,3 +1,5 @@
+from textwrap import dedent
+
 import pytest
 import re
 from typing import List, Any
@@ -378,6 +380,26 @@ Plugins.instance()
             ],
             id="optional",
         ),
+        # missing
+        pytest.param(
+            DefaultElement(config_name="with_missing"),
+            pytest.raises(
+                ConfigCompositionException,
+                match=dedent(
+                    """\
+                You must specify 'a', e.g, a=<OPTION>
+                Available options:
+                \ta1
+                \ta2
+                \ta3
+                \ta4
+                \ta5
+                \ta6
+                \tglobal"""
+                ),
+            ),
+            id="missing",
+        ),
     ],
 )
 def test_compute_element_defaults_list(
@@ -385,6 +407,7 @@ def test_compute_element_defaults_list(
     element: DefaultElement,
     expected: Any,
 ) -> None:
+
     csp = ConfigSearchPathImpl()
     csp.append(provider="test", path="file://tests/test_data/new_defaults_lists")
     repo = ConfigRepository(config_search_path=csp)

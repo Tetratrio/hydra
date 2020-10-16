@@ -7,6 +7,7 @@ from omegaconf import II, DictConfig, OmegaConf
 
 from hydra._internal.config_repository import ConfigRepository
 from hydra.core import DefaultElement
+from hydra.core.object_type import ObjectType
 from hydra.core.override_parser.types import Override
 from hydra.errors import ConfigCompositionException, MissingConfigException
 
@@ -167,6 +168,18 @@ def _compute_element_defaults_list_impl(
     deleted = delete_if_matching(delete_groups, element)
     if deleted:
         return []  # TODO: there is another in the caller
+
+    if element.config_name == "???":
+        options = repo.get_group_options(
+            element.config_group, results_filter=ObjectType.CONFIG
+        )
+        opt_list = "\n".join(["\t" + x for x in options])
+        msg = (
+            f"You must specify '{element.config_group}', e.g, {element.config_group}=<OPTION>"
+            f"\nAvailable options:"
+            f"\n{opt_list}"
+        )
+        raise ConfigCompositionException(msg)
 
     loaded = repo.load_config(
         config_path=element.config_path(),
