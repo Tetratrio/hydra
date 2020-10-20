@@ -277,6 +277,7 @@ def _run_hydra(
     config_path: Optional[str],
     config_name: Optional[str],
     strict: Optional[bool],
+    disable_job_dir: Optional[bool]
 ) -> None:
 
     from hydra.core.global_hydra import GlobalHydra
@@ -348,6 +349,8 @@ def _run_hydra(
                     config_name=config_name,
                     task_function=task_function,
                     overrides=args.overrides,
+                    with_log_configuration=not disable_job_dir,
+                    disable_job_dir=disable_job_dir
                 )
             )
         elif args.multirun:

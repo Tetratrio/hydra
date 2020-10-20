@@ -12,6 +12,7 @@ def main(
     config_path: Optional[str] = None,
     config_name: Optional[str] = None,
     strict: Optional[bool] = None,
+    disable_job_dir: Optional[bool] = None
 ) -> Callable[[TaskFunction], Any]:
     """
     :param config_path: the config path, a directory relative to the declaring python file.
@@ -35,6 +36,7 @@ def main(
                     config_path=config_path,
                     config_name=config_name,
                     strict=strict,
+                    disable_job_dir=disable_job_dir
                 )
 
         return decorated_main

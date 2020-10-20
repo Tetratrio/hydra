@@ -96,7 +96,11 @@ class Hydra:
         task_function: TaskFunction,
         overrides: List[str],
         with_log_configuration: bool = True,
+        disable_job_dir: bool = False
     ) -> JobReturn:
+        if disable_job_dir:
+            overrides.append('hydra.run.dir=.')
+            overrides.append('hydra.output_subdir=null')
         cfg = self.compose_config(
             config_name=config_name,
             overrides=overrides,
